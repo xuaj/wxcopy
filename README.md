@@ -34,7 +34,7 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-> 本机已建好的环境：`C:\Users\xuaij\.workbuddy\binaries\python\envs\wxcopy`
+> 跑测试/做开发请顺带装：`pip install -e ".[dev]"`
 
 ### 外部依赖
 
