@@ -3,6 +3,7 @@
 每个阶段都能单独调用，产物落盘，重跑自动跳过已完成的部分。
 阶段一的文案来源有四种：音视频转写 / 手输 / 图片 OCR / Excel 表格，见 core.source。
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -116,8 +117,9 @@ def _coerce_legacy(overrides: VideoOverrides | dict | None, legacy: dict) -> Vid
     return ov
 
 
-def _merge_asr_rows(existing_rows: list[dict], existing_cols: list[str],
-                    new_rows: list[dict]) -> tuple[list[dict], list[str]]:
+def _merge_asr_rows(
+    existing_rows: list[dict], existing_cols: list[str], new_rows: list[dict]
+) -> tuple[list[dict], list[str]]:
     """把新一轮转写结果并进已有表格，按「文件原名」对齐。
 
     不这么做的话 stage_asr 会用 ASR_COLUMNS 整表重写，把「仿写文案 / 配音 / 视频」
@@ -171,7 +173,7 @@ def _merge_asr_rows(existing_rows: list[dict], existing_cols: list[str],
 
 def stage_source(
     settings: Settings,
-    spec,                       # core.source.SourceSpec
+    spec,  # core.source.SourceSpec
     out: Path | str | None = None,
     language: str | None = None,
     skip_existing: bool = True,
@@ -187,8 +189,9 @@ def stage_source(
     settings.text_dir.mkdir(parents=True, exist_ok=True)
 
     log.info("文案来源：%s", spec.describe())
-    items = collect(settings, spec, language=language, skip_existing=skip_existing,
-                    with_srt=with_srt, text_dir=settings.text_dir)
+    items = collect(
+        settings, spec, language=language, skip_existing=skip_existing, with_srt=with_srt, text_dir=settings.text_dir
+    )
     if not items:
         raise ValueError(f"没有从来源中取到任何文案：{spec.describe()}")
 
@@ -229,8 +232,7 @@ def stage_asr(
     from .core.source import SourceSpec
 
     spec = SourceSpec(kind="media", media=str(media), recursive=recursive, limit=limit)
-    return stage_source(settings, spec, out=out, language=language,
-                        skip_existing=skip_existing, with_srt=with_srt)
+    return stage_source(settings, spec, out=out, language=language, skip_existing=skip_existing, with_srt=with_srt)
 
 
 def stage_rewrite(
@@ -379,21 +381,50 @@ def stage_tts(
 
 # 参与「指纹」的渲染参数：任何一个变了就得重出，否则改了参数却看到旧片
 _SIG_FIELDS = (
-    "width", "height", "fps", "style", "subtitle", "bg_path", "bg_color", "fit",
-    "font", "bold", "font_size", "font_color", "outline_color", "outline", "shadow",
-    "margin_v", "chars_per_line", "align", "subtitle_fade",
-    "big_font", "big_font_size", "big_chars_per_line", "big_lines_per_screen",
-    "big_top_ratio", "big_line_spacing",
-    "highlight_mode", "highlight_color", "highlight_outline_color", "keywords",
-    "typewriter", "type_speed", "type_hold", "type_min",
-    "crf", "preset", "audio_bitrate", "fade_in", "tail_pad",
+    "width",
+    "height",
+    "fps",
+    "style",
+    "subtitle",
+    "bg_path",
+    "bg_color",
+    "fit",
+    "font",
+    "bold",
+    "font_size",
+    "font_color",
+    "outline_color",
+    "outline",
+    "shadow",
+    "margin_v",
+    "chars_per_line",
+    "align",
+    "subtitle_fade",
+    "big_font",
+    "big_font_size",
+    "big_chars_per_line",
+    "big_lines_per_screen",
+    "big_top_ratio",
+    "big_line_spacing",
+    "highlight_mode",
+    "highlight_color",
+    "highlight_outline_color",
+    "keywords",
+    "typewriter",
+    "type_speed",
+    "type_hold",
+    "type_min",
+    "crf",
+    "preset",
+    "audio_bitrate",
+    "fade_in",
+    "tail_pad",
 )
 
 
 def _video_sig(text: str, cfg) -> str:
     """文案 + 渲染参数的指纹。文案或参数任一变化 → 指纹变化 → 重出。"""
-    payload = {"t": text,
-               "c": {k: getattr(cfg, k, None) for k in _SIG_FIELDS}}
+    payload = {"t": text, "c": {k: getattr(cfg, k, None) for k in _SIG_FIELDS}}
     blob = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
     return hashlib.sha1(blob.encode("utf-8")).hexdigest()
 
@@ -426,7 +457,7 @@ def stage_video(
     limit: int | None = None,
     concurrency: int | None = None,
     skip_existing: bool = True,
-    **legacy,                       # 兼容旧的扁平关键字调用（见 _coerce_legacy）
+    **legacy,  # 兼容旧的扁平关键字调用（见 _coerce_legacy）
 ) -> Path:
     """阶段四：仿写文案 + 配音 + 背景 -> 口播视频，并把路径回写。
 
@@ -456,7 +487,9 @@ def stage_video(
     vstyle = (ov.style or v.style or "classic").lower()
     hl = (ov.highlight_mode if ov.highlight_mode is not None else v.highlight_mode) or "none"
     cfg = CoreVideoCfg(
-        width=w, height=h, fps=v.fps,
+        width=w,
+        height=h,
+        fps=v.fps,
         bg_path=(ov.bg_path if ov.bg_path is not None else v.bg_path),
         bg_color=(ov.bg_color or v.bg_color),
         fit=(ov.fit or v.fit),
@@ -466,8 +499,10 @@ def stage_video(
         font=(ov.font or v.font),
         bold=(v.bold if ov.bold is None else ov.bold),
         font_size=int(ov.font_size or v.font_size),
-        font_color=v.font_color, outline_color=v.outline_color,
-        outline=v.outline, shadow=v.shadow,
+        font_color=v.font_color,
+        outline_color=v.outline_color,
+        outline=v.outline,
+        shadow=v.shadow,
         margin_v=int(ov.margin_v if ov.margin_v is not None else v.margin_v),
         chars_per_line=int(ov.chars_per_line or v.chars_per_line),
         align=v.align,
@@ -490,7 +525,9 @@ def stage_video(
         type_hold=float(ov.type_hold if ov.type_hold is not None else v.type_hold),
         type_min=float(ov.type_min if ov.type_min is not None else v.type_min),
         # ---- 编码 ----
-        crf=int(ov.crf or v.crf), preset=v.preset, audio_bitrate=v.audio_bitrate,
+        crf=int(ov.crf or v.crf),
+        preset=v.preset,
+        audio_bitrate=v.audio_bitrate,
         tail_pad=float(ov.tail_pad if ov.tail_pad is not None else v.tail_pad),
         fade_in=float(ov.fade_in if ov.fade_in is not None else v.fade_in),
     )
@@ -502,11 +539,18 @@ def stage_video(
         if cfg.keywords:
             font_desc += f"，关键词={len(cfg.keywords)}个"
         if cfg.typewriter:
-            font_desc += f"，打字机({'固定' if cfg.type_speed > 0 else '自适应'}" \
-                         f"{f' {cfg.type_speed:g}s/字' if cfg.type_speed > 0 else f' 停留{cfg.type_hold:.0%}'})"
-    log.info("视频参数：%dx%d，背景=%s，字幕=%s%s",
-             cfg.width, cfg.height, cfg.bg_path or f"纯色{cfg.bg_color}",
-             cfg.subtitle, font_desc)
+            font_desc += (
+                f"，打字机({'固定' if cfg.type_speed > 0 else '自适应'}"
+                f"{f' {cfg.type_speed:g}s/字' if cfg.type_speed > 0 else f' 停留{cfg.type_hold:.0%}'})"
+            )
+    log.info(
+        "视频参数：%dx%d，背景=%s，字幕=%s%s",
+        cfg.width,
+        cfg.height,
+        cfg.bg_path or f"纯色{cfg.bg_color}",
+        cfg.subtitle,
+        font_desc,
+    )
 
     vdir = Path(out_dir) if out_dir else settings.video_dir
     vdir.mkdir(parents=True, exist_ok=True)
@@ -530,11 +574,9 @@ def stage_video(
         items.append((name, text, audio))
 
     no_audio = sum(1 for _, _, a in items if not a)
-    log.info("待合成 %d 个视频（跳过已存在 %d 个，缺少配音 %d 个）",
-             len(items), len(rows) - len(items), no_audio)
+    log.info("待合成 %d 个视频（跳过已存在 %d 个，缺少配音 %d 个）", len(items), len(rows) - len(items), no_audio)
 
-    results = make_many(items, vdir, cfg,
-                        concurrency=concurrency or v.concurrency)
+    results = make_many(items, vdir, cfg, concurrency=concurrency or v.concurrency)
 
     # 记下每个成品对应的「文案 + 参数」指纹，下次据此判断「要不要重出」
     for nm, text, _ in items:
@@ -570,7 +612,7 @@ def run_pipeline(
     size: str | None = None,
     subtitle: bool | None = None,
     make_video: bool = False,
-    source=None,                     # core.source.SourceSpec | dict；None 时按 media 走音视频
+    source=None,  # core.source.SourceSpec | dict；None 时按 media 走音视频
     **rewrite_kwargs,
 ) -> dict[str, Path]:
     """一条龙：原始文案 -> 文案表 -> 仿写 -> 配音 -> 口播视频。
@@ -584,11 +626,9 @@ def run_pipeline(
         st.paths.workdir = str(workdir)
 
     if source is None:
-        spec = SourceSpec(kind="media", media=str(media or ""),
-                          recursive=recursive, limit=limit)
+        spec = SourceSpec(kind="media", media=str(media or ""), recursive=recursive, limit=limit)
     elif isinstance(source, dict):
-        spec = SourceSpec(**{k: v for k, v in source.items()
-                             if k in SourceSpec.__dataclass_fields__})
+        spec = SourceSpec(**{k: v for k, v in source.items() if k in SourceSpec.__dataclass_fields__})
     else:
         spec = source
     if limit and not spec.limit:
@@ -596,17 +636,30 @@ def run_pipeline(
     if recursive:
         spec.recursive = True
 
-    table = stage_source(st, spec, out=st.workdir / "transcripts.xlsx",
-                         language=asr_language, skip_existing=True, with_srt=True)
-    stage_rewrite(st, table, text_column="转写文案", out_column="仿写文案",
-                  provider=provider, model=model, prompt=prompt, limit=limit,
-                  **rewrite_kwargs)
+    table = stage_source(
+        st, spec, out=st.workdir / "transcripts.xlsx", language=asr_language, skip_existing=True, with_srt=True
+    )
+    stage_rewrite(
+        st,
+        table,
+        text_column="转写文案",
+        out_column="仿写文案",
+        provider=provider,
+        model=model,
+        prompt=prompt,
+        limit=limit,
+        **rewrite_kwargs,
+    )
     stage_tts(st, table, text_column="仿写文案", name_column="文件原名", voice=voice, limit=limit)
     out = {"table": table, "voice_dir": st.voice_dir}
     # 传了背景才出视频，避免老用户升级后白跑一轮 ffmpeg
     if (bg_path or "").strip() or make_video:
-        stage_video(st, table,
-                    overrides=VideoOverrides(bg_path=bg_path, size=size, subtitle=subtitle),
-                    name_column="文件原名", limit=limit)
+        stage_video(
+            st,
+            table,
+            overrides=VideoOverrides(bg_path=bg_path, size=size, subtitle=subtitle),
+            name_column="文件原名",
+            limit=limit,
+        )
         out["video_dir"] = st.video_dir
     return out

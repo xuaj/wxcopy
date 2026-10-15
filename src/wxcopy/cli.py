@@ -1,13 +1,14 @@
 """wxcopy 命令行入口。
 
-    wxcopy source       --from media ./videos   # 原始文案来源 -> 文案表
-    wxcopy transcribe   ./videos            # 视频 -> 文案表
-    wxcopy rewrite      ./in.xlsx --column 文案
-    wxcopy speak        ./in.xlsx --column 仿写文案
-    wxcopy video        ./in.xlsx --column 仿写文案 -b bg.jpg
-    wxcopy run          ./videos            # 一条龙
-    wxcopy models                           # 查看可用模型后端
+wxcopy source       --from media ./videos   # 原始文案来源 -> 文案表
+wxcopy transcribe   ./videos            # 视频 -> 文案表
+wxcopy rewrite      ./in.xlsx --column 文案
+wxcopy speak        ./in.xlsx --column 仿写文案
+wxcopy video        ./in.xlsx --column 仿写文案 -b bg.jpg
+wxcopy run          ./videos            # 一条龙
+wxcopy models                           # 查看可用模型后端
 """
+
 from __future__ import annotations
 
 import json
@@ -25,7 +26,9 @@ from .settings import PACKAGE_ROOT, Settings, load_settings, write_example_confi
 
 app = typer.Typer(
     help="视频号文案流水线：收集文案 / 多模型仿写 / 文案转配音 / 口播视频合成",
-                  no_args_is_help=True, add_completion=False)
+    no_args_is_help=True,
+    add_completion=False,
+)
 console = Console()
 
 
@@ -62,26 +65,35 @@ def transcribe(
         st.paths.workdir = str(workdir)
     from .pipeline import stage_asr
 
-    path = stage_asr(st, media, out=out, recursive=recursive, language=language,
-                     limit=limit, skip_existing=not force, with_srt=not no_srt)
+    path = stage_asr(
+        st,
+        media,
+        out=out,
+        recursive=recursive,
+        language=language,
+        limit=limit,
+        skip_existing=not force,
+        with_srt=not no_srt,
+    )
     console.print(f"[green]完成[/green] -> {path}")
 
 
 @app.command("source", help="阶段一：收集原始文案（音视频 / 手输 / 图片OCR / Excel）-> 文案表")
 def source(
-    kind: str = typer.Option("media", "--from", "-f",
-                             help="来源类型：media 音视频 | text 手输 | image 图片OCR | table 表格文档"),
+    kind: str = typer.Option(
+        "media", "--from", "-f", help="来源类型：media 音视频 | text 手输 | image 图片OCR | table 表格文档"
+    ),
     media: Optional[Path] = typer.Option(None, "--media", "-m", help="[media] 音视频文件或目录"),
     text: Optional[str] = typer.Option(None, "--text", "-t", help="[text] 直接写一段文案"),
     name: Optional[str] = typer.Option(None, "--name", help="[text] 这条文案的命名"),
-    image: Optional[List[Path]] = typer.Option(None, "--image", "-i",
-                                               help="[image] 图片文件或目录，可重复"),
+    image: Optional[List[Path]] = typer.Option(None, "--image", "-i", help="[image] 图片文件或目录，可重复"),
     table: Optional[Path] = typer.Option(None, "--table", help="[table] Excel/CSV 路径"),
     column: Optional[str] = typer.Option(None, "--column", help="[table] 文案所在列名或列序号(1起)"),
     name_column: Optional[str] = typer.Option(None, "--name-column", help="[table] 用该列命名产物"),
     sheet: Optional[str] = typer.Option(None, "--sheet"),
-    ocr_provider: Optional[str] = typer.Option(None, "--ocr-provider",
-                                               help="auto | rapidocr | tesseract | ollama | openai"),
+    ocr_provider: Optional[str] = typer.Option(
+        None, "--ocr-provider", help="auto | rapidocr | tesseract | ollama | openai"
+    ),
     ocr_model: Optional[str] = typer.Option(None, "--ocr-model", help="视觉模型，如 qwen2.5vl:7b"),
     recursive: bool = typer.Option(False, "--recursive", "-r"),
     limit: Optional[int] = typer.Option(None, "--limit", help="只处理前 N 个"),
@@ -122,8 +134,9 @@ def source(
 def ocr(
     image: Optional[List[Path]] = typer.Argument(None, help="图片文件或目录，可多个；--engines 时可省略"),
     out: Optional[Path] = typer.Option(None, "--out", "-o", help="结果写到文件；默认只打印"),
-    provider: Optional[str] = typer.Option(None, "--provider", "-p",
-                                           help="auto | rapidocr | tesseract | ollama | openai"),
+    provider: Optional[str] = typer.Option(
+        None, "--provider", "-p", help="auto | rapidocr | tesseract | ollama | openai"
+    ),
     model: Optional[str] = typer.Option(None, "--model", help="视觉模型，如 qwen2.5vl:7b"),
     list_engines: bool = typer.Option(False, "--engines", help="只看有哪些 OCR 引擎可用"),
     workdir: Optional[Path] = typer.Option(None, "--workdir", "-w"),
@@ -143,8 +156,7 @@ def ocr(
         t.add_column("可用")
         t.add_column("说明")
         for r in ocr_backends(st):
-            t.add_row(r["id"], r["name"], "[green]是[/green]" if r["ok"] else "[red]否[/red]",
-                      r["detail"])
+            t.add_row(r["id"], r["name"], "[green]是[/green]" if r["ok"] else "[red]否[/red]", r["detail"])
         console.print(t)
         return
 
@@ -152,7 +164,7 @@ def ocr(
 
     engine = build_ocr(st, provider=provider, model=model)
     files: list[Path] = []
-    for x in (image or []):
+    for x in image or []:
         files += find_images(x)
     if not files:
         raise typer.BadParameter("没有找到图片")
@@ -207,11 +219,27 @@ def rewrite(
 
     kws = [k.strip() for k in (keyword or "").split(",") if k.strip()]
     path = stage_rewrite(
-        st, table, text_column=column, out_column=out_column, provider=provider, model=model,
-        prompt=prompt, prompt_file=str(prompt_file) if prompt_file else None,
-        temperature=temperature, concurrency=concurrency, length=length, tone=tone,
-        audience=audience, cta=cta, keep_hashtags=keep_hashtags or None, keywords=kws,
-        sheet=sheet, key_column=key_column, out=out, limit=limit, skip_existing=not force,
+        st,
+        table,
+        text_column=column,
+        out_column=out_column,
+        provider=provider,
+        model=model,
+        prompt=prompt,
+        prompt_file=str(prompt_file) if prompt_file else None,
+        temperature=temperature,
+        concurrency=concurrency,
+        length=length,
+        tone=tone,
+        audience=audience,
+        cta=cta,
+        keep_hashtags=keep_hashtags or None,
+        keywords=kws,
+        sheet=sheet,
+        key_column=key_column,
+        out=out,
+        limit=limit,
+        skip_existing=not force,
     )
     console.print(f"[green]完成[/green] -> {path}")
 
@@ -244,9 +272,19 @@ def speak(
         st.paths.workdir = str(workdir)
     from .pipeline import stage_tts
 
-    path = stage_tts(st, table, text_column=column, name_column=name_column, out_dir=out_dir,
-                     voice=voice, out_column=out_column, sheet=sheet, concurrency=concurrency,
-                     limit=limit, skip_existing=not force)
+    path = stage_tts(
+        st,
+        table,
+        text_column=column,
+        name_column=name_column,
+        out_dir=out_dir,
+        voice=voice,
+        out_column=out_column,
+        sheet=sheet,
+        concurrency=concurrency,
+        limit=limit,
+        skip_existing=not force,
+    )
     console.print(f"[green]完成[/green] -> {path}")
 
 
@@ -262,26 +300,30 @@ def video(
     bg_color: Optional[str] = typer.Option(None, "--bg-color", help="纯色背景，如 #1e293b"),
     fit: Optional[str] = typer.Option(None, "--fit", help="cover（裁满，默认）| contain（居中留边）"),
     size: Optional[str] = typer.Option(
-        None, "--size",
-        help="竖屏 1080x1920 / 竖屏 720x1280 / 横屏 1920x1080 / 方形 1080x1080"),
+        None, "--size", help="竖屏 1080x1920 / 竖屏 720x1280 / 横屏 1920x1080 / 方形 1080x1080"
+    ),
     width: Optional[int] = typer.Option(None, "--width"),
     height: Optional[int] = typer.Option(None, "--height"),
     no_subtitle: bool = typer.Option(False, "--no-subtitle", help="不烧录字幕"),
-    style: Optional[str] = typer.Option(None, "--style",
-                                        help="字幕样式：classic（底部整句，默认）| big（中上部大字 + 关键词高亮）"),
-    highlight: Optional[str] = typer.Option(None, "--highlight",
-                                            help="big 样式高亮：none | alternate（隔行绿）| keywords | auto"),
+    style: Optional[str] = typer.Option(
+        None, "--style", help="字幕样式：classic（底部整句，默认）| big（中上部大字 + 关键词高亮）"
+    ),
+    highlight: Optional[str] = typer.Option(
+        None, "--highlight", help="big 样式高亮：none | alternate（隔行绿）| keywords | auto"
+    ),
     keyword: Optional[str] = typer.Option(None, "--keyword", help="--highlight keywords 时要染绿的关键词，逗号分隔"),
-    highlight_color: Optional[str] = typer.Option(None, "--highlight-color",
-                                                  help="高亮色，默认 #00F090"),
+    highlight_color: Optional[str] = typer.Option(None, "--highlight-color", help="高亮色，默认 #00F090"),
     big_chars_per_line: Optional[int] = typer.Option(None, "--big-chars-per-line", help="big 每行最多几个字，默认 4"),
     big_lines_per_screen: Optional[int] = typer.Option(None, "--big-lines-per-screen", help="big 每屏最多几行，默认 3"),
-    typewriter: Optional[bool] = typer.Option(None, "--typewriter/--no-typewriter",
-                                              help="big 样式大字逐字打出（打字机效果）"),
-    type_speed: Optional[float] = typer.Option(None, "--type-speed",
-                                               help="打字机每字固定秒数，如 0.08；0 = 按本屏时长自适应"),
-    type_hold: Optional[float] = typer.Option(None, "--type-hold",
-                                              help="自适应模式下打完整行后停留占屏时长比例，默认 0.3"),
+    typewriter: Optional[bool] = typer.Option(
+        None, "--typewriter/--no-typewriter", help="big 样式大字逐字打出（打字机效果）"
+    ),
+    type_speed: Optional[float] = typer.Option(
+        None, "--type-speed", help="打字机每字固定秒数，如 0.08；0 = 按本屏时长自适应"
+    ),
+    type_hold: Optional[float] = typer.Option(
+        None, "--type-hold", help="自适应模式下打完整行后停留占屏时长比例，默认 0.3"
+    ),
     type_min: Optional[float] = typer.Option(None, "--type-min", help="自适应模式每字时长下限（秒），默认 0.045"),
     font: Optional[str] = typer.Option(None, "--font"),
     font_size: Optional[int] = typer.Option(None, "--font-size"),
@@ -305,21 +347,44 @@ def video(
     from .pipeline import VideoOverrides, stage_video
 
     ov = VideoOverrides(
-        bg_path=str(bg) if bg else None, bg_color=bg_color, fit=fit, size=size,
-        width=width, height=height, subtitle=(False if no_subtitle else None),
-        style=style, highlight_mode=highlight,
+        bg_path=str(bg) if bg else None,
+        bg_color=bg_color,
+        fit=fit,
+        size=size,
+        width=width,
+        height=height,
+        subtitle=(False if no_subtitle else None),
+        style=style,
+        highlight_mode=highlight,
         keywords=[k.strip() for k in (keyword or "").split(",") if k.strip()] or None,
         highlight_color=highlight_color,
-        big_chars_per_line=big_chars_per_line, big_lines_per_screen=big_lines_per_screen,
-        typewriter=typewriter, type_speed=type_speed, type_hold=type_hold, type_min=type_min,
-        font=font, font_size=font_size, margin_v=margin_v, chars_per_line=chars_per_line,
-        tail_pad=tail_pad, fade_in=fade_in, crf=crf,
+        big_chars_per_line=big_chars_per_line,
+        big_lines_per_screen=big_lines_per_screen,
+        typewriter=typewriter,
+        type_speed=type_speed,
+        type_hold=type_hold,
+        type_min=type_min,
+        font=font,
+        font_size=font_size,
+        margin_v=margin_v,
+        chars_per_line=chars_per_line,
+        tail_pad=tail_pad,
+        fade_in=fade_in,
+        crf=crf,
     )
     stage_video(
-        st, table, ov,
-        text_column=column, name_column=name_column, audio_column=audio_column,
-        out_dir=out_dir, out_column=out_column,
-        concurrency=concurrency, sheet=sheet, limit=limit, skip_existing=not force,
+        st,
+        table,
+        ov,
+        text_column=column,
+        name_column=name_column,
+        audio_column=audio_column,
+        out_dir=out_dir,
+        out_column=out_column,
+        concurrency=concurrency,
+        sheet=sheet,
+        limit=limit,
+        skip_existing=not force,
     )
     console.print(f"[green]完成[/green] -> {out_dir or st.video_dir}")
 
@@ -329,8 +394,9 @@ def run(
     media: Optional[Path] = typer.Argument(None, help="[media] 音视频目录；用其他来源时可省略"),
     workdir: Path = typer.Option(Path("./output"), "--workdir", "-w"),
     config: Optional[str] = typer.Option(None, "--config", "-c"),
-    kind: str = typer.Option("media", "--from", "-f",
-                             help="来源：media 音视频 | text 手输 | image 图片OCR | table 表格"),
+    kind: str = typer.Option(
+        "media", "--from", "-f", help="来源：media 音视频 | text 手输 | image 图片OCR | table 表格"
+    ),
     text: Optional[str] = typer.Option(None, "--text", "-t", help="[text] 手输文案"),
     image: Optional[List[Path]] = typer.Option(None, "--image", "-i", help="[image] 图片文件或目录"),
     table: Optional[Path] = typer.Option(None, "--table", help="[table] Excel/CSV 路径"),
@@ -368,11 +434,23 @@ def run(
         recursive=recursive,
         limit=limit,
     )
-    res = run_pipeline(st, media or "", workdir=workdir, provider=provider, model=model,
-                       prompt=prompt, voice=voice, limit=limit, recursive=recursive,
-                       asr_language=language, bg_path=str(bg) if bg else None,
-                       size=size, subtitle=(False if no_subtitle else None),
-                       make_video=bool(bg), source=spec)
+    res = run_pipeline(
+        st,
+        media or "",
+        workdir=workdir,
+        provider=provider,
+        model=model,
+        prompt=prompt,
+        voice=voice,
+        limit=limit,
+        recursive=recursive,
+        asr_language=language,
+        bg_path=str(bg) if bg else None,
+        size=size,
+        subtitle=(False if no_subtitle else None),
+        make_video=bool(bg),
+        source=spec,
+    )
     console.print(f"[green]全部完成[/green]\n  表格: {res['table']}\n  音频: {res['voice_dir']}")
     if res.get("video_dir"):
         console.print(f"  视频: {res['video_dir']}")
@@ -406,13 +484,19 @@ def models(
     t.add_column("状态")
     t.add_column("说明")
     for r in rows:
-        t.add_row(r["provider"], r["type"], "[green]可用[/green]" if r["ok"] else "[red]不可用[/red]",
-                  (r["detail"] or "")[:60])
+        t.add_row(
+            r["provider"],
+            r["type"],
+            "[green]可用[/green]" if r["ok"] else "[red]不可用[/red]",
+            (r["detail"] or "")[:60],
+        )
     console.print(t)
     for r in rows:
         if r["ok"] and r["models"]:
-            console.print(f"[bold]{r['provider']}[/bold]: {', '.join(r['models'][:12])}"
-                          + (" ..." if len(r["models"]) > 12 else ""))
+            console.print(
+                f"[bold]{r['provider']}[/bold]: {', '.join(r['models'][:12])}"
+                + (" ..." if len(r["models"]) > 12 else "")
+            )
 
 
 @app.command("fetch-model", help="预先下载 Whisper 模型（跑批前先把网络问题解决掉）")
@@ -435,8 +519,9 @@ def voices(
 ):
     st = load_settings(config)
     if st.tts.provider != "edge":
-        console.print(f"当前 provider={st.tts.provider}，音色列表仅 edge 支持在线枚举；"
-                      f"其他引擎请在配置里直接写音色 id。")
+        console.print(
+            f"当前 provider={st.tts.provider}，音色列表仅 edge 支持在线枚举；其他引擎请在配置里直接写音色 id。"
+        )
         return
     try:
         vs = list_edge_voices(locale)
@@ -463,8 +548,7 @@ def init_config(
     dest: Path = typer.Option(Path("./wxcopy.yaml"), "--dest", "-d"),
 ):
     p = write_example_config(Path(dest))
-    console.print(f"[green]已生成[/green] {p}\n"
-                  f"云端厂商请设置对应环境变量（见 .env.example），本地 Ollama 开箱即用。")
+    console.print(f"[green]已生成[/green] {p}\n云端厂商请设置对应环境变量（见 .env.example），本地 Ollama 开箱即用。")
 
 
 @app.command("web", help="启动本地 Web 控制台（选目录/选模型/选风格/看进度）")

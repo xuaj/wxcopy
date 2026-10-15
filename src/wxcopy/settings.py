@@ -6,6 +6,7 @@
     -> ./wxcopy.yaml
     -> 命令行 --config 指定的文件
 """
+
 from __future__ import annotations
 
 import os
@@ -78,13 +79,13 @@ class ASRCfg:
     initial_prompt: str = "以下是普通话的句子，请使用简体中文输出。"
     # 国内直连 HuggingFace 常被拦，默认走镜像；海外可设为空字符串
     hf_endpoint: str = "https://hf-mirror.com"
-    disable_xet: bool = True      # Xet 通道在国内常返回 401，默认关掉
+    disable_xet: bool = True  # Xet 通道在国内常返回 401，默认关掉
     openai: ASROpenAICfg = field(default_factory=ASROpenAICfg)
 
 
 @dataclass
 class ProviderCfg:
-    type: str = "openai"          # openai | ollama
+    type: str = "openai"  # openai | ollama
     base_url: str = ""
     api_key_env: str = ""
     api_key: str = ""
@@ -143,31 +144,32 @@ class RunCfg:
 class OcrCfg:
     """图片转文字（用于「图片」这种原始文案来源）。"""
 
-    provider: str = "auto"       # auto | rapidocr | tesseract | openai | ollama
-    model: str = ""              # 视觉模型名（openai/ollama 必填，如 qwen2.5vl:7b）
-    base_url: str = ""           # 留空时 ollama 用 127.0.0.1:11434
-    api_key_env: str = ""        # openai 后端从该环境变量取 Key
-    api_key: str = ""            # 也可直接写死（不推荐）
-    prompt: str = ""             # 留空用 core.source.DEFAULT_OCR_PROMPT
-    max_side: int = 1600         # 送视觉模型前把长边缩到多少，省 token
-    min_score: float = 0.5       # rapidocr 置信度过滤
-    languages: str = "chi_sim+eng"   # 仅 tesseract
+    provider: str = "auto"  # auto | rapidocr | tesseract | openai | ollama
+    model: str = ""  # 视觉模型名（openai/ollama 必填，如 qwen2.5vl:7b）
+    base_url: str = ""  # 留空时 ollama 用 127.0.0.1:11434
+    api_key_env: str = ""  # openai 后端从该环境变量取 Key
+    api_key: str = ""  # 也可直接写死（不推荐）
+    prompt: str = ""  # 留空用 core.source.DEFAULT_OCR_PROMPT
+    max_side: int = 1600  # 送视觉模型前把长边缩到多少，省 token
+    min_score: float = 0.5  # rapidocr 置信度过滤
+    languages: str = "chi_sim+eng"  # 仅 tesseract
     concurrency: int = 1
 
 
 @dataclass
 class VideoCfg:
     """仿写文案 -> 口播视频 的默认参数。"""
-    bg_path: str = ""             # 背景图片/视频，留空用纯色
+
+    bg_path: str = ""  # 背景图片/视频，留空用纯色
     bg_color: str = "#1e293b"
-    fit: str = "cover"            # cover | contain
-    size: str = "竖屏 1080x1920"   # 见 core.video.PRESETS
-    width: int = 0                # >0 时覆盖 size
+    fit: str = "cover"  # cover | contain
+    size: str = "竖屏 1080x1920"  # 见 core.video.PRESETS
+    width: int = 0  # >0 时覆盖 size
     height: int = 0
     fps: int = 30
 
     # ---- 字幕样式 ----
-    style: str = "classic"        # classic（底部整句）| big（中上部大字 + 关键词高亮）
+    style: str = "classic"  # classic（底部整句）| big（中上部大字 + 关键词高亮）
     subtitle: bool = True
     font: str = "Microsoft YaHei"
     bold: bool = False
@@ -182,28 +184,28 @@ class VideoCfg:
     subtitle_fade: float = 0.08
 
     # ---- big 样式专用 ----
-    big_font: str = ""            # 空 = 自动挑粗黑体（SimHei）
-    big_font_size: int = 0        # 0 = 按画面宽度自适应
+    big_font: str = ""  # 空 = 自动挑粗黑体（SimHei）
+    big_font_size: int = 0  # 0 = 按画面宽度自适应
     big_chars_per_line: int = 4
     big_lines_per_screen: int = 3
     big_top_ratio: float = 0.16
     big_line_spacing: float = 1.5
     highlight_mode: str = "none"  # none | alternate | keywords | auto
-    highlight_color: str = "&H0090F000"       # #00F090 霓虹绿
+    highlight_color: str = "&H0090F000"  # #00F090 霓虹绿
     highlight_outline_color: str = "&H00FFFFFF"
     keywords: list[str] = field(default_factory=list)
 
     # ---- 打字机效果（逐字打出，仅 big 样式生效）----
     typewriter: bool = False
-    type_speed: float = 0.0       # 每字固定秒数；0 = 按本屏时长自动算
-    type_hold: float = 0.3        # 打完后整行停留时间占本屏时长的比例
-    type_min: float = 0.045       # 自动模式下每字时长下限（秒）
+    type_speed: float = 0.0  # 每字固定秒数；0 = 按本屏时长自动算
+    type_hold: float = 0.3  # 打完后整行停留时间占本屏时长的比例
+    type_min: float = 0.045  # 自动模式下每字时长下限（秒）
 
     crf: int = 23
     preset: str = "veryfast"
     audio_bitrate: str = "192k"
     fade_in: float = 0.0
-    tail_pad: float = 0.6             # 语音结束后追加的静音秒数（尾部留白）
+    tail_pad: float = 0.6  # 语音结束后追加的静音秒数（尾部留白）
     concurrency: int = 1
 
 
@@ -288,15 +290,19 @@ def load_settings(config: str | None = None) -> Settings:
     return Settings(
         paths=_take(raw.get("paths") or {}, PathsCfg),
         asr=ASRCfg(
-            **{**_take(raw.get("asr") or {}, ASRCfg).__dict__,
-               "openai": _take((raw.get("asr") or {}).get("openai") or {}, ASROpenAICfg)},
+            **{
+                **_take(raw.get("asr") or {}, ASRCfg).__dict__,
+                "openai": _take((raw.get("asr") or {}).get("openai") or {}, ASROpenAICfg),
+            },
         ),
         llm=_take(raw.get("llm") or {}, LLMCfg),
         providers=providers,
         rewrite=_take(raw.get("rewrite") or {}, RewriteCfg),
         tts=TTSCfg(
-            **{**_take(raw.get("tts") or {}, TTSCfg).__dict__,
-               "openai": _take((raw.get("tts") or {}).get("openai") or {}, TTSOpenAICfg)},
+            **{
+                **_take(raw.get("tts") or {}, TTSCfg).__dict__,
+                "openai": _take((raw.get("tts") or {}).get("openai") or {}, TTSOpenAICfg),
+            },
         ),
         run=_take(raw.get("run") or {}, RunCfg),
         video=_take(raw.get("video") or {}, VideoCfg),

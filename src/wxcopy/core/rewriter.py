@@ -6,6 +6,7 @@
 
 内置模板见 `wxcopy/prompts/rewrite/*.md`，也可用 `--prompt-file` 指定自己的 md。
 """
+
 from __future__ import annotations
 
 import re
@@ -91,10 +92,11 @@ def load_prompt(name_or_path: str) -> str:
 @dataclass
 class RewriteStyle:
     """影响 user 侧指令的可调项。"""
-    length: str = "与原文案相当"      # 如 "150字左右" / "更短更精炼"
-    tone: str = ""                    # 如 "接地气" / "专业克制"
-    audience: str = ""                # 如 "餐饮小店老板"
-    cta: str = ""                     # 自定义行动号召
+
+    length: str = "与原文案相当"  # 如 "150字左右" / "更短更精炼"
+    tone: str = ""  # 如 "接地气" / "专业克制"
+    audience: str = ""  # 如 "餐饮小店老板"
+    cta: str = ""  # 自定义行动号召
     keep_hashtags: bool = False
     extra: str = ""
     keywords: list[str] = field(default_factory=list)
@@ -136,8 +138,9 @@ def clean_output(raw: str, keep_hashtags: bool = False) -> str:
 
 
 class Rewriter:
-    def __init__(self, llm: BaseLLM, cfg: RewriteCfg, style: RewriteStyle | None = None,
-                 system_prompt: str | None = None):
+    def __init__(
+        self, llm: BaseLLM, cfg: RewriteCfg, style: RewriteStyle | None = None, system_prompt: str | None = None
+    ):
         self.llm = llm
         self.cfg = cfg
         self.style = style or RewriteStyle(keep_hashtags=cfg.keep_hashtags)

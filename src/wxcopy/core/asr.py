@@ -3,6 +3,7 @@
 - faster-whisper：本地离线，CTranslate2 推理，中文效果与速度平衡最好，默认走它
 - openai：走 OpenAI 兼容的 /v1/audio/transcriptions，适合没显卡或想省事的场景
 """
+
 from __future__ import annotations
 
 import os
@@ -32,8 +33,23 @@ def apply_hf_env(cfg) -> None:
     if endpoint:
         os.environ.setdefault("HF_ENDPOINT", endpoint)
 
-MEDIA_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".flv", ".wmv", ".webm", ".m4v",
-              ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"}
+
+MEDIA_EXTS = {
+    ".mp4",
+    ".mov",
+    ".mkv",
+    ".avi",
+    ".flv",
+    ".wmv",
+    ".webm",
+    ".m4v",
+    ".mp3",
+    ".wav",
+    ".m4a",
+    ".aac",
+    ".flac",
+    ".ogg",
+}
 
 
 class ASRError(RuntimeError):
@@ -87,8 +103,7 @@ class BaseASR(ABC):
     name: str = ""
 
     @abstractmethod
-    def transcribe(self, media: Path, language: str | None = None) -> Transcript:
-        ...
+    def transcribe(self, media: Path, language: str | None = None) -> Transcript: ...
 
 
 class FasterWhisperASR(BaseASR):
@@ -105,8 +120,7 @@ class FasterWhisperASR(BaseASR):
     @property
     def model(self):
         if self._model is None:
-            log.info("加载 Whisper 模型 %s (device=%s)…首次会联网下载",
-                     self.cfg.model, self.cfg.device)
+            log.info("加载 Whisper 模型 %s (device=%s)…首次会联网下载", self.cfg.model, self.cfg.device)
             self._model = self._cls(
                 self.cfg.model,
                 device=self.cfg.device,

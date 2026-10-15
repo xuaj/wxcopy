@@ -1,4 +1,5 @@
 """settings.py 的配置解析测试。"""
+
 from __future__ import annotations
 
 import pytest
@@ -13,6 +14,7 @@ from wxcopy.settings import (
 )
 
 # ---------------- 环境变量插值 ----------------
+
 
 def test_expand_env_replaces_var(monkeypatch):
     monkeypatch.setenv("WX_TEST_KEY", "secret")
@@ -37,6 +39,7 @@ def test_expand_env_recurses_into_containers(monkeypatch):
 
 # ---------------- _take（字典 -> dataclass） ----------------
 
+
 def test_take_ignores_unknown_keys():
     cfg = _take({"bg_color": "#000000", "不存在的键": 1}, VideoCfg)
     assert cfg.bg_color == "#000000"
@@ -49,6 +52,7 @@ def test_take_keeps_defaults_for_missing():
 
 
 # ---------------- deep merge ----------------
+
 
 def test_deep_merge_nested():
     base = {"a": {"b": 1, "c": 2}, "z": 0}
@@ -64,6 +68,7 @@ def test_deep_merge_overrides_scalar_and_list():
 
 # ---------------- load_settings ----------------
 
+
 def test_load_settings_has_sane_defaults():
     st = load_settings()
     assert st.llm.provider == "ollama"
@@ -75,8 +80,7 @@ def test_load_settings_has_sane_defaults():
 def test_load_settings_merges_explicit_file(tmp_path):
     p = tmp_path / "my.yaml"
     p.write_text(
-        "llm:\n  provider: deepseek\n  model: deepseek-chat\n"
-        "video:\n  style: big\n",
+        "llm:\n  provider: deepseek\n  model: deepseek-chat\nvideo:\n  style: big\n",
         encoding="utf-8",
     )
     st = load_settings(str(p))

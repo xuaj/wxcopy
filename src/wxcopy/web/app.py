@@ -5,6 +5,7 @@
 - 模型 / 仿写风格 / 音色 的枚举
 - 流水线任务的启动、进度、日志、取消
 """
+
 from __future__ import annotations
 
 import os
@@ -63,8 +64,7 @@ def create_app() -> FastAPI:
         else:
             items.append({"name": "根目录", "path": "/"})
         home = Path.home()
-        for label, p in [("用户目录", home), ("桌面", home / "Desktop"),
-                         ("下载", home / "Downloads")]:
+        for label, p in [("用户目录", home), ("桌面", home / "Desktop"), ("下载", home / "Downloads")]:
             if p.exists():
                 items.append({"name": label, "path": str(p)})
         return {"roots": items}
@@ -72,8 +72,7 @@ def create_app() -> FastAPI:
     @app.get("/api/browse")
     def browse(path: str = "", kind: str = "media") -> dict:
         if not path:
-            return {"path": "", "parent": None, "dirs": [], "files": [], "media_count": 0,
-                    "error": ""}
+            return {"path": "", "parent": None, "dirs": [], "files": [], "media_count": 0, "error": ""}
         from ..core.source import TABLE_EXTS
         from ..core.video import IMAGE_EXTS, VIDEO_EXTS
 
@@ -82,8 +81,8 @@ def create_app() -> FastAPI:
             "audio": MEDIA_EXTS - VIDEO_EXTS,
             "video": VIDEO_EXTS,
             "image": IMAGE_EXTS,
-            "table": TABLE_EXTS,                    # 选 Excel/CSV 当文案来源
-            "bg": VIDEO_EXTS | IMAGE_EXTS,          # 背景：图片或视频都行
+            "table": TABLE_EXTS,  # 选 Excel/CSV 当文案来源
+            "bg": VIDEO_EXTS | IMAGE_EXTS,  # 背景：图片或视频都行
             "any": None,
         }.get(kind, MEDIA_EXTS)
 
@@ -100,12 +99,16 @@ def create_app() -> FastAPI:
                 if child.is_dir():
                     dirs.append({"name": child.name, "path": str(child)})
                 elif wanted is None or child.suffix.lower() in wanted:
-                    files.append({"name": child.name, "path": str(child),
-                                  "size": child.stat().st_size})
+                    files.append({"name": child.name, "path": str(child), "size": child.stat().st_size})
         except PermissionError:
-            return {"path": str(p), "parent": str(p.parent) if p.parent else None,
-                    "dirs": dirs, "files": files[:50], "media_count": len(files),
-                    "error": "无权限读取该目录"}
+            return {
+                "path": str(p),
+                "parent": str(p.parent) if p.parent else None,
+                "dirs": dirs,
+                "files": files[:50],
+                "media_count": len(files),
+                "error": "无权限读取该目录",
+            }
         return {
             "path": str(p),
             "parent": str(p.parent) if p.parent != p else None,
@@ -131,8 +134,7 @@ def create_app() -> FastAPI:
         for r in rows:
             r["models"] = r.get("models") or []
             r["model_count"] = len(r["models"])
-        data = {"providers": rows, "default_provider": st.llm.provider,
-                "default_model": st.llm.model}
+        data = {"providers": rows, "default_provider": st.llm.provider, "default_model": st.llm.model}
         _models_cache.update(at=now, data=data)
         return {"cached": False, **data}
 
@@ -149,14 +151,22 @@ def create_app() -> FastAPI:
             return {"cached": True, **_voices_cache["data"]}
         try:
             vs = list_edge_voices("zh-")
-            data = {"voices": [{"id": v["ShortName"], "gender": v.get("Gender", ""),
-                                "locale": v.get("Locale", "")} for v in vs], "error": ""}
+            data = {
+                "voices": [
+                    {"id": v["ShortName"], "gender": v.get("Gender", ""), "locale": v.get("Locale", "")} for v in vs
+                ],
+                "error": "",
+            }
         except Exception as e:  # noqa: BLE001
-            data = {"voices": [{"id": "zh-CN-XiaoxiaoNeural", "gender": "Female", "locale": "zh-CN"},
-                               {"id": "zh-CN-YunxiNeural", "gender": "Male", "locale": "zh-CN"},
-                               {"id": "zh-CN-YunjianNeural", "gender": "Male", "locale": "zh-CN"},
-                               {"id": "zh-CN-XiaoyiNeural", "gender": "Female", "locale": "zh-CN"}],
-                    "error": f"在线音色拉取失败（{str(e)[:80]}），已回退到常用列表"}
+            data = {
+                "voices": [
+                    {"id": "zh-CN-XiaoxiaoNeural", "gender": "Female", "locale": "zh-CN"},
+                    {"id": "zh-CN-YunxiNeural", "gender": "Male", "locale": "zh-CN"},
+                    {"id": "zh-CN-YunjianNeural", "gender": "Male", "locale": "zh-CN"},
+                    {"id": "zh-CN-XiaoyiNeural", "gender": "Female", "locale": "zh-CN"},
+                ],
+                "error": f"在线音色拉取失败（{str(e)[:80]}），已回退到常用列表",
+            }
         _voices_cache.update(at=now, data=data)
         return {"cached": False, **data}
 
@@ -190,12 +200,16 @@ def create_app() -> FastAPI:
             "voice": st.tts.voice,
             # ---- 视频合成 ----
             "video_presets": list(PRESETS.keys()),
-            "video_styles": [{"id": "classic", "name": "经典 · 底部整句"},
-                             {"id": "big", "name": "大字 · 中上部关键词高亮"}],
-            "video_highlights": [{"id": "none", "name": "不高亮"},
-                                 {"id": "alternate", "name": "隔行高亮（首行绿）"},
-                                 {"id": "auto", "name": "自动（数字/营销词）"},
-                                 {"id": "keywords", "name": "指定关键词"}],
+            "video_styles": [
+                {"id": "classic", "name": "经典 · 底部整句"},
+                {"id": "big", "name": "大字 · 中上部关键词高亮"},
+            ],
+            "video_highlights": [
+                {"id": "none", "name": "不高亮"},
+                {"id": "alternate", "name": "隔行高亮（首行绿）"},
+                {"id": "auto", "name": "自动（数字/营销词）"},
+                {"id": "keywords", "name": "指定关键词"},
+            ],
             "video_size": st.video.size,
             "video_bg_path": st.video.bg_path,
             "video_bg_color": st.video.bg_color,
@@ -226,9 +240,9 @@ def create_app() -> FastAPI:
     @app.get("/api/ocr")
     def ocr_engines() -> dict:
         from ..core.source import ocr_backends
+
         st = load_settings()
-        return {"engines": ocr_backends(st), "default": st.ocr.provider,
-                "model": st.ocr.model}
+        return {"engines": ocr_backends(st), "default": st.ocr.provider, "model": st.ocr.model}
 
     @app.post("/api/table/columns")
     def table_columns(payload: dict) -> dict:
@@ -254,8 +268,12 @@ def create_app() -> FastAPI:
                 if hit:
                     guess = hit[0]
                     break
-            return {"columns": columns, "sheets": sheets, "rows": len(rows),
-                    "guess": guess or (columns[0] if columns else "")}
+            return {
+                "columns": columns,
+                "sheets": sheets,
+                "rows": len(rows),
+                "guess": guess or (columns[0] if columns else ""),
+            }
         except Exception as e:  # noqa: BLE001
             raise HTTPException(400, f"读取表格失败：{str(e)[:160]}") from e
 
@@ -338,8 +356,7 @@ def create_app() -> FastAPI:
     return app
 
 
-def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True,
-          log_level: str = "INFO") -> None:
+def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True, log_level: str = "INFO") -> None:
     setup_logging(log_level)
     import uvicorn
 

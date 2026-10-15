@@ -7,6 +7,7 @@
   额外用原生 /api/tags、/api/pull 做模型列举与拉取。
 - 新增厂商 = 在配置 providers 里加一段，无需改代码。
 """
+
 from __future__ import annotations
 
 import time
@@ -74,7 +75,7 @@ class BaseLLM(ABC):
             except Exception as e:  # noqa: BLE001
                 last = e
                 if attempt < (self.gen.max_retries or 1):
-                    wait = 2 ** attempt
+                    wait = 2**attempt
                     log.warning("第 %d 次调用失败，%d 秒后重试：%s", attempt, wait, str(e)[:120])
                     time.sleep(wait)
         raise LLMError(f"{self.name} 调用失败：{last}")
@@ -92,8 +93,7 @@ class OpenAICompatLLM(BaseLLM):
         api_key = provider.api_key or api_key_of(provider.api_key_env)
         if not api_key:
             raise LLMError(
-                f"未提供 API Key：请在环境变量 {provider.api_key_env or '(未配置)'} 中设置，"
-                f"或在配置里写死 api_key"
+                f"未提供 API Key：请在环境变量 {provider.api_key_env or '(未配置)'} 中设置，或在配置里写死 api_key"
             )
         self.client = OpenAI(
             base_url=provider.base_url or None,
@@ -167,9 +167,7 @@ class OllamaLLM(OpenAICompatLLM):
         import urllib.request
 
         body = json.dumps({"name": model or self.model, "stream": False}).encode()
-        req = urllib.request.Request(
-            f"{self.root}/api/pull", data=body, headers={"Content-Type": "application/json"}
-        )
+        req = urllib.request.Request(f"{self.root}/api/pull", data=body, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=3600) as resp:
             resp.read()
         return True
@@ -206,9 +204,23 @@ def probe_all(settings: Settings) -> list[dict[str, Any]]:
         try:
             llm = build_llm(settings, provider=name)
             ok, msg = llm.health()
-            rows.append({"provider": name, "type": settings.providers[name].type,
-                         "ok": ok, "detail": msg, "models": llm.list_models() if ok else []})
+            rows.append(
+                {
+                    "provider": name,
+                    "type": settings.providers[name].type,
+                    "ok": ok,
+                    "detail": msg,
+                    "models": llm.list_models() if ok else [],
+                }
+            )
         except Exception as e:  # noqa: BLE001
-            rows.append({"provider": name, "type": settings.providers[name].type,
-                         "ok": False, "detail": str(e)[:160], "models": []})
+            rows.append(
+                {
+                    "provider": name,
+                    "type": settings.providers[name].type,
+                    "ok": False,
+                    "detail": str(e)[:160],
+                    "models": [],
+                }
+            )
     return rows

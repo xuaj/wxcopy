@@ -10,6 +10,7 @@
     table  表格文档  —— Excel/CSV 的某一列
     media  音视频    —— 走 ASR 转写（原有能力）
 """
+
 from __future__ import annotations
 
 import base64
@@ -51,12 +52,12 @@ class SourceError(RuntimeError):
 class SourceItem:
     """一条待处理的原始文案。"""
 
-    name: str                 # 用于命名产物（音频/视频文件名）
+    name: str  # 用于命名产物（音频/视频文件名）
     text: str
-    origin: str = ""          # 来源文件路径（图片/表格），音视频为空
+    origin: str = ""  # 来源文件路径（图片/表格），音视频为空
     duration: float = 0.0
     language: str = ""
-    text_file: str = ""       # 落盘后的文案文件路径
+    text_file: str = ""  # 落盘后的文案文件路径
     kind: str = "text"
 
     def as_row(self, index: int) -> dict:
@@ -147,14 +148,13 @@ class RapidOCR(BaseOCR):
                 from rapidocr_onnxruntime import RapidOCR  # 延迟导入
             except ImportError as e:  # pragma: no cover
                 raise SourceError(
-                    "未安装本地 OCR。执行：pip install \"wxcopy[ocr]\"\n"
-                    "（或 pip install rapidocr-onnxruntime）"
+                    '未安装本地 OCR。执行：pip install "wxcopy[ocr]"\n（或 pip install rapidocr-onnxruntime）'
                 ) from e
             self._engine = RapidOCR()
         return self._engine
 
     def probe(self) -> None:
-        _ = self.engine          # 触发 import + 引擎构造
+        _ = self.engine  # 触发 import + 引擎构造
 
     def read(self, image: Path) -> str:
         result, _ = self.engine(str(image))
@@ -189,21 +189,19 @@ class TesseractOCR(BaseOCR):
                 import pytesseract  # 延迟导入
             except ImportError as e:  # pragma: no cover
                 raise SourceError(
-                    "未安装 pytesseract。执行：pip install pytesseract，"
-                    "并自行安装 tesseract 程序（含 chi_sim 语言包）"
+                    "未安装 pytesseract。执行：pip install pytesseract，并自行安装 tesseract 程序（含 chi_sim 语言包）"
                 ) from e
             self._mod = pytesseract
         return self._mod
 
     def probe(self) -> None:
-        _ = self.mod.get_tesseract_version()   # 没装 tesseract 程序会在这里炸
+        _ = self.mod.get_tesseract_version()  # 没装 tesseract 程序会在这里炸
 
     def read(self, image: Path) -> str:
         from PIL import Image  # noqa: PLC0415
 
         with Image.open(image) as im:
-            text = self.mod.image_to_string(im.convert("RGB"),
-                                            lang=self.cfg.languages or "chi_sim+eng")
+            text = self.mod.image_to_string(im.convert("RGB"), lang=self.cfg.languages or "chi_sim+eng")
         return _join_ocr_lines([t for t in str(text).splitlines() if t.strip()])
 
 
@@ -213,8 +211,7 @@ class VisionLLMOCR(BaseOCR):
     kind = "openai"
     offline = False
 
-    def __init__(self, cfg: OcrCfg | None = None, model: str | None = None,
-                 timeout: int = 300):
+    def __init__(self, cfg: OcrCfg | None = None, model: str | None = None, timeout: int = 300):
         from openai import OpenAI  # 延迟导入
 
         self.cfg = cfg or OcrCfg()
@@ -223,12 +220,8 @@ class VisionLLMOCR(BaseOCR):
             raise SourceError("未指定视觉模型（ocr.model）")
         api_key = self.cfg.api_key or api_key_of(self.cfg.api_key_env)
         if not api_key:
-            raise SourceError(
-                f"未提供 API Key：请设置环境变量 "
-                f"{self.cfg.api_key_env or '(未配置 ocr.api_key_env)'}"
-            )
-        self.client = OpenAI(base_url=self.cfg.base_url or None,
-                             api_key=api_key, timeout=timeout)
+            raise SourceError(f"未提供 API Key：请设置环境变量 {self.cfg.api_key_env or '(未配置 ocr.api_key_env)'}")
+        self.client = OpenAI(base_url=self.cfg.base_url or None, api_key=api_key, timeout=timeout)
         self.name = f"vision:{self.model}"
 
     def probe(self) -> None:
@@ -238,13 +231,15 @@ class VisionLLMOCR(BaseOCR):
         data = _image_data_uri(image, self.cfg.max_side)
         payload: dict[str, Any] = {
             "model": self.model,
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": self.cfg.prompt or DEFAULT_OCR_PROMPT},
-                    {"type": "image_url", "image_url": {"url": data}},
-                ],
-            }],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": self.cfg.prompt or DEFAULT_OCR_PROMPT},
+                        {"type": "image_url", "image_url": {"url": data}},
+                    ],
+                }
+            ],
             "temperature": 0,
         }
         resp = self.client.chat.completions.create(**payload)
@@ -259,8 +254,7 @@ class OllamaVisionOCR(BaseOCR):
     kind = "ollama"
     offline = True
 
-    def __init__(self, cfg: OcrCfg | None = None, model: str | None = None,
-                 base_url: str = "", timeout: int = 600):
+    def __init__(self, cfg: OcrCfg | None = None, model: str | None = None, base_url: str = "", timeout: int = 600):
         self.cfg = cfg or OcrCfg()
         self.model = model or self.cfg.model
         if not self.model:
@@ -279,26 +273,28 @@ class OllamaVisionOCR(BaseOCR):
         import urllib.request
 
         raw = _image_jpeg_bytes(image, self.cfg.max_side)
-        body = json.dumps({
-            "model": self.model,
-            "messages": [{
-                "role": "user",
-                "content": self.cfg.prompt or DEFAULT_OCR_PROMPT,
-                # Ollama 原生接口要的是裸 base64，不要 data: 前缀
-                "images": [base64.b64encode(raw).decode("ascii")],
-            }],
-            "stream": False,
-            "options": {"temperature": 0},
-        }).encode()
-        req = urllib.request.Request(f"{self.root}/api/chat", data=body,
-                                     headers={"Content-Type": "application/json"})
+        body = json.dumps(
+            {
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": self.cfg.prompt or DEFAULT_OCR_PROMPT,
+                        # Ollama 原生接口要的是裸 base64，不要 data: 前缀
+                        "images": [base64.b64encode(raw).decode("ascii")],
+                    }
+                ],
+                "stream": False,
+                "options": {"temperature": 0},
+            }
+        ).encode()
+        req = urllib.request.Request(f"{self.root}/api/chat", data=body, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             data = json.load(resp)
         return _strip_fence(str(data.get("message", {}).get("content", "")).strip())
 
 
-def build_ocr(settings: Settings, provider: str | None = None,
-              model: str | None = None) -> BaseOCR:
+def build_ocr(settings: Settings, provider: str | None = None, model: str | None = None) -> BaseOCR:
     """按配置构造 OCR 后端。provider=auto 时挑第一个真正能用的。"""
     cfg = settings.ocr
     want = (provider or cfg.provider or "auto").lower()
@@ -320,7 +316,7 @@ def build_ocr(settings: Settings, provider: str | None = None,
     for name in order:
         try:
             probe = build_ocr(settings, provider=name, model=model)
-            probe.probe()          # 真跑一次可用性检查，避免「构造成功但用不了」
+            probe.probe()  # 真跑一次可用性检查，避免「构造成功但用不了」
             log.info("使用 OCR 引擎：%s", probe.name)
             return probe
         except Exception as e:  # noqa: BLE001
@@ -358,8 +354,7 @@ def ocr_backends(settings: Settings) -> list[dict[str, Any]]:
             ok, detail = True, eng.name
         except Exception as e:  # noqa: BLE001
             detail = str(e)[:120]
-        rows.append({"id": name, "name": label, "ok": ok, "detail": detail,
-                     "offline": offline})
+        rows.append({"id": name, "name": label, "ok": ok, "detail": detail, "offline": offline})
     return rows
 
 
@@ -371,8 +366,21 @@ def _image_jpeg_bytes(image: Path, max_side: int = 1600) -> bytes:
     src = Path(image)
     if max_side and max_side > 0:
         scale = f"scale='if(gt(iw,ih),{max_side},-2)':'if(gt(iw,ih),-2,{max_side})'"
-        cmd = [get_ffmpeg(), "-hide_banner", "-loglevel", "error",
-               "-i", str(src), "-vf", scale, "-q:v", "3", "-f", "mjpeg", "-"]
+        cmd = [
+            get_ffmpeg(),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(src),
+            "-vf",
+            scale,
+            "-q:v",
+            "3",
+            "-f",
+            "mjpeg",
+            "-",
+        ]
         try:
             out = subprocess.run(cmd, capture_output=True, check=True).stdout
             if out:
@@ -431,9 +439,13 @@ def from_text(text: str, name: str | None = None) -> list[SourceItem]:
     return [SourceItem(name=safe_stem(Path(nm), limit=40), text=body, kind="text")]
 
 
-def from_images(images: Iterable[Path], settings: Settings,
-                provider: str | None = None, model: str | None = None,
-                recursive: bool = False) -> list[SourceItem]:
+def from_images(
+    images: Iterable[Path],
+    settings: Settings,
+    provider: str | None = None,
+    model: str | None = None,
+    recursive: bool = False,
+) -> list[SourceItem]:
     """图片 OCR。每个入参可以是单张图，也可以是装图的目录。"""
     files: list[Path] = []
     for x in images or []:
@@ -452,14 +464,18 @@ def from_images(images: Iterable[Path], settings: Settings,
         except Exception as e:  # noqa: BLE001
             log.error("OCR 失败 %s：%s", img.name, str(e)[:160])
         log.info("[%d/%d] 识别 %s -> %d 字", i, len(files), img.name, len(text))
-        items.append(SourceItem(name=safe_stem(img, limit=40), text=text,
-                                origin=str(img), kind="image"))
+        items.append(SourceItem(name=safe_stem(img, limit=40), text=text, origin=str(img), kind="image"))
     return items
 
 
-def from_table(table: Path | str, column: str, settings: Settings,
-               sheet: str | None = None, name_column: str | None = None,
-               limit: int | None = None) -> list[SourceItem]:
+def from_table(
+    table: Path | str,
+    column: str,
+    settings: Settings,
+    sheet: str | None = None,
+    name_column: str | None = None,
+    limit: int | None = None,
+) -> list[SourceItem]:
     """从 Excel/CSV 的某一列读文案。"""
     from ..io.table import read_table, resolve_column
 
@@ -482,16 +498,21 @@ def from_table(table: Path | str, column: str, settings: Settings,
             continue
         raw_name = str(r.get(name_col, "") or "").strip() if name_col else ""
         nm = raw_name or f"{path.stem}_{i:03d}"
-        items.append(SourceItem(name=safe_stem(Path(nm), limit=40), text=text,
-                                origin=str(path), kind="table"))
+        items.append(SourceItem(name=safe_stem(Path(nm), limit=40), text=text, origin=str(path), kind="table"))
     log.info("从 %s 的「%s」列读到 %d 条文案", path.name, src_col, len(items))
     return items
 
 
-def from_media(media: Path | str, settings: Settings, recursive: bool = False,
-               language: str | None = None, limit: int | None = None,
-               skip_existing: bool = True, with_srt: bool = True,
-               text_dir: Path | None = None) -> list[SourceItem]:
+def from_media(
+    media: Path | str,
+    settings: Settings,
+    recursive: bool = False,
+    language: str | None = None,
+    limit: int | None = None,
+    skip_existing: bool = True,
+    with_srt: bool = True,
+    text_dir: Path | None = None,
+) -> list[SourceItem]:
     """音视频转写（沿用原有 ASR 能力）。"""
     from .asr import build_asr, find_media
 
@@ -511,8 +532,9 @@ def from_media(media: Path | str, settings: Settings, recursive: bool = False,
         txt_file = out_dir / f"{stem}.txt"
         if skip_existing and txt_file.exists() and txt_file.stat().st_size > 0:
             log.info("[%d/%d] 跳过（已有文案）%s", i, len(files), stem)
-            items.append(SourceItem(name=stem, text=txt_file.read_text(encoding="utf-8"),
-                                    text_file=str(txt_file), kind="media"))
+            items.append(
+                SourceItem(name=stem, text=txt_file.read_text(encoding="utf-8"), text_file=str(txt_file), kind="media")
+            )
             continue
         log.info("[%d/%d] 转写 %s", i, len(files), stem)
         try:
@@ -521,9 +543,16 @@ def from_media(media: Path | str, settings: Settings, recursive: bool = False,
             log.error("转写失败 %s：%s", stem, str(e)[:160])
             continue
         tr.save(txt_file, with_srt=with_srt)
-        items.append(SourceItem(name=stem, text=tr.text, duration=tr.duration,
-                                language=tr.language, text_file=str(txt_file),
-                                kind="media"))
+        items.append(
+            SourceItem(
+                name=stem,
+                text=tr.text,
+                duration=tr.duration,
+                language=tr.language,
+                text_file=str(txt_file),
+                kind="media",
+            )
+        )
         log.info("   -> %d 字", len(tr.text))
     return items
 
@@ -558,15 +587,15 @@ class SourceSpec:
     """一次运行的「文案来源」描述。"""
 
     kind: str = "media"
-    media: str = ""             # 音视频文件或目录
-    text: str = ""              # 手输文案
-    name: str = ""              # 手输文案的命名
-    images: list[str] = field(default_factory=list)   # 图片文件或目录
-    table: str = ""             # Excel/CSV 路径
-    table_column: str = ""      # 文案所在列
+    media: str = ""  # 音视频文件或目录
+    text: str = ""  # 手输文案
+    name: str = ""  # 手输文案的命名
+    images: list[str] = field(default_factory=list)  # 图片文件或目录
+    table: str = ""  # Excel/CSV 路径
+    table_column: str = ""  # 文案所在列
     table_sheet: str = ""
-    name_column: str = ""       # 用该列命名产物
-    ocr_provider: str = ""      # 覆盖 ocr.provider
+    name_column: str = ""  # 用该列命名产物
+    ocr_provider: str = ""  # 覆盖 ocr.provider
     ocr_model: str = ""
     recursive: bool = False
     limit: int | None = None
@@ -583,9 +612,14 @@ class SourceSpec:
         return self.kind
 
 
-def collect(settings: Settings, spec: SourceSpec,
-            language: str | None = None, skip_existing: bool = True,
-            with_srt: bool = True, text_dir: Path | None = None) -> list[SourceItem]:
+def collect(
+    settings: Settings,
+    spec: SourceSpec,
+    language: str | None = None,
+    skip_existing: bool = True,
+    with_srt: bool = True,
+    text_dir: Path | None = None,
+) -> list[SourceItem]:
     """按 spec 收集原始文案，并把非音视频来源的文案落盘。"""
     kind = (spec.kind or "media").lower()
     if kind not in SOURCE_KINDS:
@@ -596,28 +630,43 @@ def collect(settings: Settings, spec: SourceSpec,
     if kind == "media":
         if not (spec.media or "").strip():
             raise SourceError("未指定音视频目录")
-        items = from_media(spec.media, settings, recursive=spec.recursive,
-                           language=language, limit=spec.limit,
-                           skip_existing=skip_existing, with_srt=with_srt,
-                           text_dir=out_dir)
+        items = from_media(
+            spec.media,
+            settings,
+            recursive=spec.recursive,
+            language=language,
+            limit=spec.limit,
+            skip_existing=skip_existing,
+            with_srt=with_srt,
+            text_dir=out_dir,
+        )
     elif kind == "text":
         items = from_text(spec.text, spec.name)
     elif kind == "image":
         if not spec.images:
             raise SourceError("未指定图片文件或目录")
-        items = from_images(spec.images, settings, provider=spec.ocr_provider or None,
-                            model=spec.ocr_model or None, recursive=spec.recursive)
+        items = from_images(
+            spec.images,
+            settings,
+            provider=spec.ocr_provider or None,
+            model=spec.ocr_model or None,
+            recursive=spec.recursive,
+        )
         if spec.limit:
-            items = items[:spec.limit]
+            items = items[: spec.limit]
     else:  # table
         if not (spec.table or "").strip():
             raise SourceError("未指定表格文件")
         if not (spec.table_column or "").strip():
             raise SourceError("未指定表格里的文案列名")
-        items = from_table(spec.table, spec.table_column, settings,
-                           sheet=spec.table_sheet or None,
-                           name_column=spec.name_column or None,
-                           limit=spec.limit)
+        items = from_table(
+            spec.table,
+            spec.table_column,
+            settings,
+            sheet=spec.table_sheet or None,
+            name_column=spec.name_column or None,
+            limit=spec.limit,
+        )
 
     items = [it for it in items if (it.text or "").strip()]
     save_items(items, out_dir)

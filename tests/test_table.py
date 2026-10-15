@@ -1,4 +1,5 @@
 """io/table.py 的读写测试。"""
+
 from __future__ import annotations
 
 import pytest
@@ -29,6 +30,7 @@ def _write_xlsx(path, rows, columns, sheet="Sheet1"):
 
 # ---------------- read_table ----------------
 
+
 def test_read_csv(tmp_path):
     p = tmp_path / "a.csv"
     p.write_text("标题,原始文案\n甲,内容一\n乙,内容二\n", encoding="utf-8-sig")
@@ -52,9 +54,7 @@ def test_read_tsv(tmp_path):
 
 
 def test_read_xlsx(tmp_path):
-    p = _write_xlsx(tmp_path / "a.xlsx",
-                    [{"标题": "甲", "原始文案": "内容一"}],
-                    ["标题", "原始文案"])
+    p = _write_xlsx(tmp_path / "a.xlsx", [{"标题": "甲", "原始文案": "内容一"}], ["标题", "原始文案"])
     rows, cols = read_table(p)
     assert cols == ["标题", "原始文案"]
     assert rows[0]["标题"] == "甲"
@@ -94,6 +94,7 @@ def test_list_sheets(tmp_path):
 
 # ---------------- resolve_column ----------------
 
+
 def test_resolve_column_exact():
     assert resolve_column(["序号", "文案", "备注"], "文案") == "文案"
 
@@ -124,6 +125,7 @@ def test_resolve_column_missing():
 
 # ---------------- write_column / export_rows ----------------
 
+
 def test_export_then_read_roundtrip(tmp_path):
     cols = ["序号", "文件原名", "转写文案"]
     rows = [{"序号": "1", "文件原名": "a.mp4", "转写文案": "你好"}]
@@ -135,8 +137,7 @@ def test_export_then_read_roundtrip(tmp_path):
 
 
 def test_write_column_new_column_appended(tmp_path):
-    p = _write_xlsx(tmp_path / "a.xlsx",
-                    [{"标题": "甲"}, {"标题": "乙"}], ["标题"])
+    p = _write_xlsx(tmp_path / "a.xlsx", [{"标题": "甲"}, {"标题": "乙"}], ["标题"])
     write_column(p, "仿写文案", ["新一", "新二"])
     rows, cols = read_table(p)
     assert "仿写文案" in cols
@@ -155,9 +156,7 @@ def test_write_column_accepts_key_value_tuples(tmp_path):
 
 def test_write_column_by_key_column(tmp_path):
     """指定 key_column 时按值匹配行，行序变化也不会写错。"""
-    p = _write_xlsx(tmp_path / "a.xlsx",
-                    [{"标题": "甲", "配音": ""}, {"标题": "乙", "配音": ""}],
-                    ["标题", "配音"])
+    p = _write_xlsx(tmp_path / "a.xlsx", [{"标题": "甲", "配音": ""}, {"标题": "乙", "配音": ""}], ["标题", "配音"])
     write_column(p, "配音", [("乙", "乙.mp3"), ("甲", "甲.mp3")], key_column="标题")
     rows, _ = read_table(p)
     by = {r["标题"]: r["配音"] for r in rows}

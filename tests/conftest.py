@@ -3,6 +3,7 @@
 项目是 editable 安装的，正常情况下 `import wxcopy` 直接可用；
 这里再加一层 src 兜底，方便没装包、直接跑源码的场景。
 """
+
 from __future__ import annotations
 
 import sys

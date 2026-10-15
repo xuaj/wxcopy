@@ -10,6 +10,7 @@
 - ``classic``：底部居中整句小字，一行十几个字，适合信息型口播
 - ``big``    ：中上部超大粗体短句，每行 2~4 字、隔行染霓虹绿，复刻主流爆款口播号的字幕
 """
+
 from __future__ import annotations
 
 import os
@@ -39,22 +40,52 @@ BIG_FONT = "SimHei"
 _FONT_FILES = {"SimHei": "simhei.ttf", "Microsoft YaHei": "msyh.ttc"}
 
 # big 样式的字号 / 位置按画面宽度比例自适应（比例来自对参考爆款视频的实测采样）
-BIG_FONT_RATIO = 0.147      # 字号 ≈ 画面宽 × 0.147（1080 → 159）
-BIG_LINE_SPACING = 1.5      # 行距 = 字号 × 1.5
-BIG_TOP_RATIO = 0.16        # 首行顶部距画面顶部
-BIG_CHARS_PER_LINE = 4      # 每行最多几个字
-BIG_LINES_PER_SCREEN = 3    # 每屏最多几行
+BIG_FONT_RATIO = 0.147  # 字号 ≈ 画面宽 × 0.147（1080 → 159）
+BIG_LINE_SPACING = 1.5  # 行距 = 字号 × 1.5
+BIG_TOP_RATIO = 0.16  # 首行顶部距画面顶部
+BIG_CHARS_PER_LINE = 4  # 每行最多几个字
+BIG_LINES_PER_SCREEN = 3  # 每屏最多几行
 
 # auto 高亮模式：命中这些模式/词就染成高亮色
 AUTO_HIGHLIGHT_PATTERNS = [
-    r"\d+(?:\.\d+)?\s*[%％]",                                       # 百分比
+    r"\d+(?:\.\d+)?\s*[%％]",  # 百分比
     r"\d+(?:\.\d+)?\s*(?:万|亿|千)?\s*(?:元|块|倍|个|天|年|月|日|次|人|家|平|单|款)",  # 数量
 ]
 AUTO_HIGHLIGHT_WORDS = [
-    "免费", "省钱", "省时", "省力", "省一半", "翻倍", "翻番", "风口", "秘诀", "内幕",
-    "限时", "成本", "利润", "效率", "关键", "必须", "千万", "记住", "一定", "只要",
-    "就能", "不用", "直接", "马上", "立刻", "第一个", "最重要", "最赚钱", "暴利",
-    "稳赚", "赚钱", "红利", "机会", "趋势",
+    "免费",
+    "省钱",
+    "省时",
+    "省力",
+    "省一半",
+    "翻倍",
+    "翻番",
+    "风口",
+    "秘诀",
+    "内幕",
+    "限时",
+    "成本",
+    "利润",
+    "效率",
+    "关键",
+    "必须",
+    "千万",
+    "记住",
+    "一定",
+    "只要",
+    "就能",
+    "不用",
+    "直接",
+    "马上",
+    "立刻",
+    "第一个",
+    "最重要",
+    "最赚钱",
+    "暴利",
+    "稳赚",
+    "赚钱",
+    "红利",
+    "机会",
+    "趋势",
 ]
 
 
@@ -68,48 +99,48 @@ class VideoCfg:
     height: int = 1920
     fps: int = 30
 
-    bg_path: str = ""            # 背景图片或视频；留空用纯色
-    bg_color: str = "#1e293b"    # 纯色背景（bg_path 为空时生效）
-    fit: str = "cover"           # cover（裁满）| contain（居中留边）
+    bg_path: str = ""  # 背景图片或视频；留空用纯色
+    bg_color: str = "#1e293b"  # 纯色背景（bg_path 为空时生效）
+    fit: str = "cover"  # cover（裁满）| contain（居中留边）
 
     # ---- 字幕样式 ----
-    style: str = "classic"       # classic（底部整句小字）| big（中上部大字 + 关键词高亮）
+    style: str = "classic"  # classic（底部整句小字）| big（中上部大字 + 关键词高亮）
     subtitle: bool = True
     font: str = "Microsoft YaHei"
     bold: bool = False
     font_size: int = 76
-    font_color: str = "&H00FFFFFF"     # ASS 颜色为 &H00BBGGRR
+    font_color: str = "&H00FFFFFF"  # ASS 颜色为 &H00BBGGRR
     outline_color: str = "&H00000000"
     outline: float = 3.0
     shadow: float = 1.0
-    margin_v: int = 300          # classic：距底部
+    margin_v: int = 300  # classic：距底部
     chars_per_line: int = 16
-    align: int = 2               # 2=底部居中 5=垂直居中
+    align: int = 2  # 2=底部居中 5=垂直居中
 
     # ---- big 样式专用（classic 下不生效）----
-    big_font: str = ""           # 空 = 自动（优先 SimHei 等粗黑体）
-    big_font_size: int = 0       # 0 = 按画面宽度自适应（width × 0.147）
+    big_font: str = ""  # 空 = 自动（优先 SimHei 等粗黑体）
+    big_font_size: int = 0  # 0 = 按画面宽度自适应（width × 0.147）
     big_chars_per_line: int = BIG_CHARS_PER_LINE
     big_lines_per_screen: int = BIG_LINES_PER_SCREEN
     big_top_ratio: float = BIG_TOP_RATIO
     big_line_spacing: float = BIG_LINE_SPACING
-    highlight_mode: str = "none"             # none | alternate | keywords | auto
-    highlight_color: str = "&H0090F000"      # #00F090 霓虹绿（ASS 为 &H00BBGGRR）
+    highlight_mode: str = "none"  # none | alternate | keywords | auto
+    highlight_color: str = "&H0090F000"  # #00F090 霓虹绿（ASS 为 &H00BBGGRR）
     highlight_outline_color: str = "&H00FFFFFF"
     keywords: list[str] = field(default_factory=list)
-    subtitle_fade: float = 0.08              # 每条字幕淡入淡出秒数，0=硬切
+    subtitle_fade: float = 0.08  # 每条字幕淡入淡出秒数，0=硬切
 
     # ---- 打字机效果（big 样式下逐字打出）----
     typewriter: bool = False
-    type_speed: float = 0.0                  # 每字秒数；0 = 按屏时长自动算
-    type_hold: float = 0.3                   # 整屏打完后停留时间占屏时长的比例
-    type_min: float = 0.045                  # 自动算出的每字时长下限（秒）
+    type_speed: float = 0.0  # 每字秒数；0 = 按屏时长自动算
+    type_hold: float = 0.3  # 整屏打完后停留时间占屏时长的比例
+    type_min: float = 0.045  # 自动算出的每字时长下限（秒）
 
     crf: int = 23
     preset: str = "veryfast"
     audio_bitrate: str = "192k"
     fade_in: float = 0.0
-    tail_pad: float = 0.6          # 语音结束后追加的静音秒数
+    tail_pad: float = 0.6  # 语音结束后追加的静音秒数
 
 
 # 句末标点：优先在这里断
@@ -167,8 +198,21 @@ def split_lines(text: str, per_line: int = 16) -> list[str]:
 
 # jieba 默认词典对短视频领域的词切得不好（「小程序」会被切成「小/程序」），补一批
 EXTRA_WORDS = [
-    "小程序", "视频号", "公众号", "直播带货", "私域", "引流", "获客", "复购",
-    "转化率", "翻台率", "扫码点餐", "共享经济", "共享模式", "点单", "团购",
+    "小程序",
+    "视频号",
+    "公众号",
+    "直播带货",
+    "私域",
+    "引流",
+    "获客",
+    "复购",
+    "转化率",
+    "翻台率",
+    "扫码点餐",
+    "共享经济",
+    "共享模式",
+    "点单",
+    "团购",
 ]
 _extra_added: set[str] = set()
 
@@ -267,22 +311,19 @@ def alloc_timings(lines: list[str], total: float) -> list[tuple[float, float]]:
     return _alloc_by_weights([max(1, len(ln)) for ln in lines], total)
 
 
-def pack_screens(lines: list[str], per_screen: int = BIG_LINES_PER_SCREEN
-                 ) -> list[list[str]]:
+def pack_screens(lines: list[str], per_screen: int = BIG_LINES_PER_SCREEN) -> list[list[str]]:
     """把行按「每屏 N 行」分组，同屏的行同时出现。"""
     per_screen = max(1, per_screen)
-    return [lines[i:i + per_screen] for i in range(0, len(lines), per_screen)]
+    return [lines[i : i + per_screen] for i in range(0, len(lines), per_screen)]
 
 
-def alloc_screen_timings(screens: list[list[str]], total: float
-                         ) -> list[tuple[float, float]]:
+def alloc_screen_timings(screens: list[list[str]], total: float) -> list[tuple[float, float]]:
     """按每屏的总字数分配时间。"""
     return _alloc_by_weights([max(1, sum(len(ln) for ln in s)) for s in screens], total)
 
 
 # ---------- 关键词高亮 ----------
-def _find_highlight_spans(line: str, cfg: VideoCfg, partial: bool = False
-                          ) -> list[tuple[int, int]]:
+def _find_highlight_spans(line: str, cfg: VideoCfg, partial: bool = False) -> list[tuple[int, int]]:
     """返回该行里需要染高亮色的 [起, 止) 区间，已去重叠。
 
     ``partial=True`` 额外把「行尾刚好是某个关键词的前缀」也算高亮——
@@ -344,7 +385,7 @@ def _paint(line: str, cfg: VideoCfg, spans: list[tuple[int, int]]) -> str:
         return line
     on = f"{{\\c{cfg.highlight_color}\\3c{cfg.highlight_outline_color}}}"
     off = f"{{\\c{cfg.font_color}\\3c{cfg.outline_color}}}"
-    for a, b in sorted(spans, reverse=True):     # 从后往前插，避免位置偏移
+    for a, b in sorted(spans, reverse=True):  # 从后往前插，避免位置偏移
         line = line[:a] + on + line[a:b] + off + line[b:]
     return line
 
@@ -368,8 +409,7 @@ def _ass_time(t: float) -> str:
     return f"{h:d}:{m:02d}:{s:05.2f}"
 
 
-def _ass_head(cfg: VideoCfg, font_size: int, align: int, margin_v: int,
-              outline: float, font: str | None = None) -> str:
+def _ass_head(cfg: VideoCfg, font_size: int, align: int, margin_v: int, outline: float, font: str | None = None) -> str:
     bold = 1 if cfg.bold else 0
     return (
         "[Script Info]\n"
@@ -435,7 +475,7 @@ def pick_font(cfg: VideoCfg) -> str:
     if cfg.big_font:
         return cfg.big_font
     if cfg.font and cfg.font != DEFAULT_FONT:
-        return cfg.font                       # 用户在配置里显式改过，尊重
+        return cfg.font  # 用户在配置里显式改过，尊重
     return BIG_FONT if _font_installed(BIG_FONT) else cfg.font
 
 
@@ -444,8 +484,9 @@ def big_font_size_of(cfg: VideoCfg) -> int:
     return int(cfg.big_font_size or max(24, round(cfg.width * BIG_FONT_RATIO)))
 
 
-def write_ass(lines: list[str], timings: list[tuple[float, float]],
-              path: Path, cfg: VideoCfg, total: float | None = None) -> Path:
+def write_ass(
+    lines: list[str], timings: list[tuple[float, float]], path: Path, cfg: VideoCfg, total: float | None = None
+) -> Path:
     """按 cfg.style 生成 ASS。
 
     classic：一行一条 Dialogue，按 timings 依次显示。
@@ -464,14 +505,14 @@ def write_ass(lines: list[str], timings: list[tuple[float, float]],
     return path
 
 
-def _big_dialogues(screen: list[str], st: float, en: float, cfg: VideoCfg,
-                   y0: int, line_h: int, cx: int, fade: str) -> list[str]:
+def _big_dialogues(
+    screen: list[str], st: float, en: float, cfg: VideoCfg, y0: int, line_h: int, cx: int, fade: str
+) -> list[str]:
     """一屏的事件。cfg.typewriter 为真时逐字打出，否则整屏一次显示。"""
     out: list[str] = []
 
     def dia(a: float, b: float, y: int, text: str) -> str:
-        return (f"Dialogue: 0,{_ass_time(a)},{_ass_time(b)},Default,,0,0,0,,"
-                f"{fade}{{\\an5\\pos({cx},{y})}}{text}\n")
+        return f"Dialogue: 0,{_ass_time(a)},{_ass_time(b)},Default,,0,0,0,,{fade}{{\\an5\\pos({cx},{y})}}{text}\n"
 
     if not cfg.typewriter:
         y = y0
@@ -507,11 +548,10 @@ def _big_dialogues(screen: list[str], st: float, en: float, cfg: VideoCfg,
     return out
 
 
-def _write_ass_big(lines: list[str], path: Path, cfg: VideoCfg,
-                   total: float | None = None) -> Path:
+def _write_ass_big(lines: list[str], path: Path, cfg: VideoCfg, total: float | None = None) -> Path:
     """中上部超大粗体短句 + 隔行/关键词高亮，复刻主流爆款口播号字幕。"""
     font_size = big_font_size_of(cfg)
-    outline = max(2.0, round(font_size * 0.028, 1))       # 描边随字号等比缩放
+    outline = max(2.0, round(font_size * 0.028, 1))  # 描边随字号等比缩放
     line_h = int(font_size * max(1.0, cfg.big_line_spacing))
     y0 = int(cfg.height * max(0.0, cfg.big_top_ratio)) + font_size // 2
     cx = cfg.width // 2
@@ -549,20 +589,19 @@ def _bg_input(cfg: VideoCfg, dur: float) -> tuple[list[str], str]:
         raise VideoError(f"不支持的背景格式：{ext}（支持 {sorted(IMAGE_EXTS | VIDEO_EXTS)}）")
     # 纯色兜底：不写 d= 即无限长
     color = cfg.bg_color.lstrip("#")
-    return ["-f", "lavfi", "-i",
-            f"color=c=0x{color}:s={cfg.width}x{cfg.height}:r={cfg.fps}"], "0"
+    return ["-f", "lavfi", "-i", f"color=c=0x{color}:s={cfg.width}x{cfg.height}:r={cfg.fps}"], "0"
 
 
 def _bg_filter(cfg: VideoCfg) -> str:
     w, h = cfg.width, cfg.height
     if cfg.fit == "contain":
-        return (f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black")
+        return f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black"
     return f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}"
 
 
-def make_video(audio: Path, out_path: Path, text: str = "", cfg: VideoCfg | None = None,
-               duration: float | None = None) -> Path:
+def make_video(
+    audio: Path, out_path: Path, text: str = "", cfg: VideoCfg | None = None, duration: float | None = None
+) -> Path:
     """把一条配音 + 背景 + 字幕合成 mp4。"""
     cfg = cfg or VideoCfg()
     ffmpeg = get_ffmpeg()
@@ -575,9 +614,8 @@ def make_video(audio: Path, out_path: Path, text: str = "", cfg: VideoCfg | None
     dur = duration or probe_duration(audio)
     if not dur or dur <= 0:
         # 探测彻底失败才按字节粗估（只影响字幕节奏，不影响视频长度）
-        dur = max(3.0, audio.stat().st_size / 6000.0)   # 6000B/s ≈ 48kbps，edge-tts 的量级
-        log.warning("无法探测 %s 的时长，按文件大小粗估为 %.1fs（仅用于分配字幕）",
-                    audio.name, dur)
+        dur = max(3.0, audio.stat().st_size / 6000.0)  # 6000B/s ≈ 48kbps，edge-tts 的量级
+        log.warning("无法探测 %s 的时长，按文件大小粗估为 %.1fs（仅用于分配字幕）", audio.name, dur)
     dur = round(dur, 2)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -610,33 +648,50 @@ def make_video(audio: Path, out_path: Path, text: str = "", cfg: VideoCfg | None
     cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
     cmd += bg_args
     cmd += ["-i", str(audio)]
-    cmd += ["-filter_complex", f"[0:v]{','.join(chain)}[v];{audio_chain}",
-            "-map", "[v]", "-map", "[a]",
-            "-c:v", "libx264", "-preset", cfg.preset, "-crf", str(cfg.crf),
-            "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", cfg.audio_bitrate,
-            # 不用 -t 硬截断（会把音频砍掉），靠 -shortest 让画面跟着补过静音的音频走
-            "-shortest", str(out_path)]
+    cmd += [
+        "-filter_complex",
+        f"[0:v]{','.join(chain)}[v];{audio_chain}",
+        "-map",
+        "[v]",
+        "-map",
+        "[a]",
+        "-c:v",
+        "libx264",
+        "-preset",
+        cfg.preset,
+        "-crf",
+        str(cfg.crf),
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        cfg.audio_bitrate,
+        # 不用 -t 硬截断（会把音频砍掉），靠 -shortest 让画面跟着补过静音的音频走
+        "-shortest",
+        str(out_path),
+    ]
 
     log.debug("合成命令：%s", " ".join(cmd))
     # cwd 设到产物目录，ASS 用相对名，避免 Windows 路径里的冒号/反斜杠破坏滤镜参数
-    r = subprocess.run(cmd, cwd=str(workdir), capture_output=True, text=True,
-                       encoding="utf-8", errors="replace")
+    r = subprocess.run(cmd, cwd=str(workdir), capture_output=True, text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0 or not out_path.is_file():
         raise VideoError(f"合成失败：{(r.stderr or '')[-600:]}")
 
     # 自检：视频绝不能比音频短，短了说明语音被截掉
     vdur = probe_duration(out_path, exact=False)
     if vdur and vdur + 0.15 < dur:
-        log.warning("⚠ %s 视频 %.2fs 短于音频 %.2fs，语音可能被截断，请检查背景文件是否可循环",
-                    out_path.name, vdur, dur)
+        log.warning(
+            "⚠ %s 视频 %.2fs 短于音频 %.2fs，语音可能被截断，请检查背景文件是否可循环", out_path.name, vdur, dur
+        )
     else:
         log.info("   %s 音频 %.2fs -> 视频 %.2fs", out_path.name, dur, vdur or 0.0)
     return out_path
 
 
-def make_many(items: list[tuple[str, str, str]], out_dir: Path,
-              cfg: VideoCfg | None = None, concurrency: int = 1) -> dict[str, Path]:
+def make_many(
+    items: list[tuple[str, str, str]], out_dir: Path, cfg: VideoCfg | None = None, concurrency: int = 1
+) -> dict[str, Path]:
     """items: [(name, 文案, 音频路径)] -> {name: 视频路径}。"""
     from concurrent.futures import ThreadPoolExecutor
 

@@ -1,4 +1,5 @@
 """音视频底层工具：抽音轨、探测时长、定位 ffmpeg。"""
+
 from __future__ import annotations
 
 import re
@@ -27,21 +28,27 @@ def get_ffmpeg() -> str:
 
         return imageio_ffmpeg.get_ffmpeg_exe()
     except Exception as e:  # noqa: BLE001
-        raise RuntimeError(
-            "未找到 ffmpeg。请安装系统 ffmpeg，或 pip install imageio-ffmpeg 使用内置二进制。"
-        ) from e
+        raise RuntimeError("未找到 ffmpeg。请安装系统 ffmpeg，或 pip install imageio-ffmpeg 使用内置二进制。") from e
 
 
 def extract_audio(src: Path, dst: Path, sample_rate: int = 16000, channels: int = 1) -> Path:
     """把任意音视频转成 16kHz 单声道 wav，ASR 前统一格式用。"""
     dst.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
-        get_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
-        "-i", str(src),
-        "-vn",                 # 丢掉视频流
-        "-ac", str(channels),
-        "-ar", str(sample_rate),
-        "-c:a", "pcm_s16le",
+        get_ffmpeg(),
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(src),
+        "-vn",  # 丢掉视频流
+        "-ac",
+        str(channels),
+        "-ar",
+        str(sample_rate),
+        "-c:a",
+        "pcm_s16le",
         str(dst),
     ]
     subprocess.run(cmd, check=True)
@@ -57,9 +64,19 @@ def load_audio_mono16k(path: Path, sample_rate: int = 16000):
     import numpy as np
 
     cmd = [
-        get_ffmpeg(), "-hide_banner", "-loglevel", "error",
-        "-i", str(path),
-        "-f", "s16le", "-ac", "1", "-ar", str(sample_rate), "-",
+        get_ffmpeg(),
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(path),
+        "-f",
+        "s16le",
+        "-ac",
+        "1",
+        "-ar",
+        str(sample_rate),
+        "-",
     ]
     raw = subprocess.run(cmd, capture_output=True, check=True).stdout
     if not raw:
@@ -113,8 +130,16 @@ def probe_duration(path: Path, exact: bool = True) -> float:
 
     exe = shutil.which("ffprobe")
     if exe:
-        cmd = [exe, "-v", "error", "-show_entries", "format=duration",
-               "-of", "default=noprint_wrappers=1:nokey=1", str(path)]
+        cmd = [
+            exe,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ]
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, **_FF_ENC, timeout=30)
             return float((r.stdout or "").strip())
@@ -138,4 +163,4 @@ def safe_stem(path: Path, limit: int = 60) -> str:
     for ch in '<>:"/\\|?*':
         stem = stem.replace(ch, "_")
     stem = stem.strip().rstrip(".")
-    return (stem[:limit] or "untitled")
+    return stem[:limit] or "untitled"

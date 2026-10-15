@@ -3,6 +3,7 @@
 流水线函数本身不回调进度，这里通过拦截 wxcopy 的日志来还原阶段与进度，
 好处是不用改动 pipeline 的既有签名。
 """
+
 from __future__ import annotations
 
 import logging
@@ -48,7 +49,7 @@ STAGE_RULES: list[tuple[str, str]] = [
 class Job:
     id: str
     params: dict[str, Any]
-    status: str = "pending"          # pending | running | done | error | cancelled
+    status: str = "pending"  # pending | running | done | error | cancelled
     stage: str = ""
     current: int = 0
     total: int = 0
@@ -92,8 +93,7 @@ class Job:
             "error": self.error,
             "outputs": self.outputs,
             "params": self.params,
-            "elapsed": round((self.finished_at or time.time()) - self.started_at, 1)
-            if self.started_at else 0,
+            "elapsed": round((self.finished_at or time.time()) - self.started_at, 1) if self.started_at else 0,
             "logs": self.logs[since:],
             "total_logs": len(self.logs),
         }
@@ -147,8 +147,7 @@ class JobManager:
             finally:
                 logger.removeHandler(handler)
                 job.finished_at = time.time()
-                job.stage = {"done": "全部完成", "error": "失败",
-                             "cancelled": "已取消"}.get(job.status, job.stage)
+                job.stage = {"done": "全部完成", "error": "失败", "cancelled": "已取消"}.get(job.status, job.stage)
 
         t = threading.Thread(target=_wrap, daemon=True)
         self._threads[job.id] = t
@@ -284,7 +283,7 @@ def make_runner(params: dict) -> Callable[[Job], dict]:
             size=vp.get("size"),
             subtitle=(bool(vp["subtitle"]) if vp.get("subtitle") is not None else None),
             make_video=gen_video,
-            source=(src or None),      # dict -> pipeline 里转成 SourceSpec
+            source=(src or None),  # dict -> pipeline 里转成 SourceSpec
         )
 
         out: dict[str, Any] = {k: str(v) for k, v in res.items()}

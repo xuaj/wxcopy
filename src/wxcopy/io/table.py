@@ -3,6 +3,7 @@
 - 读：pandas，自动识别 sheet
 - 写：openpyxl 原地写列，保留其他 sheet 与格式，避免整表被覆盖
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -65,8 +66,9 @@ def resolve_column(columns: list[str], spec: str) -> str:
     raise KeyError(f"找不到列 {spec}，可用列：{columns}")
 
 
-def write_column(path: Path | str, column: str, values: list[Any],
-                 sheet: str | None = None, key_column: str | None = None) -> Path:
+def write_column(
+    path: Path | str, column: str, values: list[Any], sheet: str | None = None, key_column: str | None = None
+) -> Path:
     """把一列写回表格。
 
     - key_column 为空：按行序写入
@@ -125,16 +127,14 @@ def write_column(path: Path | str, column: str, values: list[Any],
     return p
 
 
-def export_rows(path: Path | str, rows: list[dict], columns: list[str] | None = None,
-                sheet: str = "Sheet1") -> Path:
+def export_rows(path: Path | str, rows: list[dict], columns: list[str] | None = None, sheet: str = "Sheet1") -> Path:
     """新建表格文件并写入全部行。"""
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     cols = columns or (list(rows[0].keys()) if rows else [])
 
     if _is_text_table(p):
-        pd.DataFrame(rows, columns=cols).to_csv(
-            p, index=False, encoding="utf-8-sig", sep=TEXT_DELIM[p.suffix.lower()])
+        pd.DataFrame(rows, columns=cols).to_csv(p, index=False, encoding="utf-8-sig", sep=TEXT_DELIM[p.suffix.lower()])
         return p
 
     wb = Workbook()
@@ -149,7 +149,6 @@ def export_rows(path: Path | str, rows: list[dict], columns: list[str] | None = 
             cell = ws.cell(row=i, column=j, value=row.get(c, ""))
             cell.alignment = Alignment(wrap_text=True, vertical="top")
     for j, c in enumerate(cols, 1):
-        ws.column_dimensions[ws.cell(row=1, column=j).column_letter].width = \
-            max(12, min(60, len(str(c)) * 2 + 10))
+        ws.column_dimensions[ws.cell(row=1, column=j).column_letter].width = max(12, min(60, len(str(c)) * 2 + 10))
     wb.save(p)
     return p

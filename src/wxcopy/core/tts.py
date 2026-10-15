@@ -4,6 +4,7 @@
 - openai:  走 /v1/audio/speech 兼容端点（硅基流动 CosyVoice、OpenAI、豆包等）
 - pyttsx3: 完全离线兜底，中文效果一般，仅应急
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,8 +29,7 @@ class BaseTTS(ABC):
     name: str = ""
 
     @abstractmethod
-    def synth(self, text: str, out_path: Path, **kw) -> Path:
-        ...
+    def synth(self, text: str, out_path: Path, **kw) -> Path: ...
 
     @staticmethod
     def split_text(text: str, limit: int = MAX_EDGE_CHARS) -> list[str]:
@@ -143,8 +143,22 @@ def _concat_audio(files: list[Path], out_path: Path) -> Path:
 
     lst = out_path.with_suffix(".concat.txt")
     lst.write_text("".join(f"file '{f.as_posix()}'\n" for f in files), encoding="utf-8")
-    cmd = [get_ffmpeg(), "-y", "-hide_banner", "-loglevel", "error",
-           "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(out_path)]
+    cmd = [
+        get_ffmpeg(),
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(lst),
+        "-c",
+        "copy",
+        str(out_path),
+    ]
     import subprocess
 
     subprocess.run(cmd, check=True)
@@ -174,8 +188,9 @@ def list_edge_voices(locale: str = "zh-") -> list[dict]:
     return [v for v in voices if v["ShortName"].lower().startswith(locale.lower())]
 
 
-def synth_many(items: list[tuple[str, str]], out_dir: Path, tts: BaseTTS,
-               concurrency: int = 2, ext: str | None = None) -> dict[str, Path]:
+def synth_many(
+    items: list[tuple[str, str]], out_dir: Path, tts: BaseTTS, concurrency: int = 2, ext: str | None = None
+) -> dict[str, Path]:
     """items: [(name, text)] -> {name: 音频路径}。"""
     out_dir.mkdir(parents=True, exist_ok=True)
     ext = ext or getattr(tts.cfg, "format", "mp3") or "mp3"

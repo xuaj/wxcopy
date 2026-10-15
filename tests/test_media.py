@@ -1,4 +1,5 @@
 """core/media.py 的纯函数测试（不涉及 ffmpeg 调用部分）。"""
+
 from __future__ import annotations
 
 from pathlib import Path

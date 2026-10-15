@@ -1,4 +1,5 @@
 """pipeline.py 里几个「不跑模型、不调 ffmpeg」的关键纯函数测试。"""
+
 from __future__ import annotations
 
 import dataclasses
@@ -20,6 +21,7 @@ from wxcopy.pipeline import (
 
 # ---------------- 表格合并（保住已有成果的关键） ----------------
 
+
 def test_merge_keeps_extra_columns():
     """转写结果并回旧表时，「仿写文案/配音/视频」等列不能被清掉。"""
     old = [{"文件原名": "a.mp4", "转写文案": "旧文", "仿写文案": "已仿写", "视频": "1.mp4"}]
@@ -27,8 +29,8 @@ def test_merge_keeps_extra_columns():
     new = [{"文件原名": "a.mp4", "转写文案": "新文"}]
 
     rows, cols = _merge_asr_rows(old, old_cols, new)
-    assert rows[0]["转写文案"] == "新文"      # ASR 列取新值
-    assert rows[0]["仿写文案"] == "已仿写"    # 其他列保住
+    assert rows[0]["转写文案"] == "新文"  # ASR 列取新值
+    assert rows[0]["仿写文案"] == "已仿写"  # 其他列保住
     assert rows[0]["视频"] == "1.mp4"
     assert "仿写文案" in cols and "视频" in cols
 
@@ -79,6 +81,7 @@ def test_merge_keeps_rows_not_in_this_scan():
 
 
 # ---------------- 视频指纹（断点续跑） ----------------
+
 
 def _cfg(**over):
     return VideoCfg(**over)
@@ -136,6 +139,7 @@ def test_sig_covers_typewriter_params(missing):
 
 
 # ---------------- VideoOverrides（阶段四参数收敛） ----------------
+
 
 def test_overrides_defaults_are_none():
     """None 表示「不覆盖」；默认成 0/False 会把配置里的值冲掉。"""
