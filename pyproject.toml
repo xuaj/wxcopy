@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wxcopy"
-version = "0.3.0"
+version = "0.4.0"
 description = "视频号对标素材处理流水线：语音转文字 / 多模型文案仿写 / 文案转配音 / 口播视频合成"
 readme = "README.md"
 requires-python = ">=3.10"

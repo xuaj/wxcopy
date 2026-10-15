@@ -389,6 +389,68 @@ def video(
     console.print(f"[green]完成[/green] -> {out_dir or st.video_dir}")
 
 
+@app.command("publish", help="阶段五：成片 -> 发布素材包（标题/简介/话题 + 清单）")
+def publish(
+    table: Path = typer.Argument(..., help="Excel/CSV 路径（即文案表）"),
+    column: str = typer.Option("转写文案", "--column", help="文案所在列（用来提炼标题）"),
+    name_column: Optional[str] = typer.Option(None, "--name-column", help="用该列命名产物"),
+    video_column: str = typer.Option("视频", "--video-column"),
+    cover_column: str = typer.Option("封面", "--cover-column"),
+    title_column: str = typer.Option("推荐标题", "--title-column", help="回写的标题列名"),
+    topic_column: str = typer.Option("话题", "--topic-column", help="回写的话题列名"),
+    out_dir: Optional[Path] = typer.Option(None, "--out-dir", help="素材包目录，默认 {workdir}/publish"),
+    cover: Optional[Path] = typer.Option(None, "--cover", help="封面文件或目录（目录里按名字找同名图）"),
+    platforms: Optional[str] = typer.Option(None, "--platforms", help="清单里的平台，如 '视频号,抖音'"),
+    keyword: Optional[str] = typer.Option(None, "--keyword", help="话题里必带的关键词，逗号分隔"),
+    sheet: Optional[str] = typer.Option(None, "--sheet"),
+    provider: Optional[str] = typer.Option(None, "--provider", help="ollama | deepseek | ..."),
+    model: Optional[str] = typer.Option(None, "--model"),
+    prompt: Optional[str] = typer.Option(None, "--prompt", help="内置模板名，见 prompts 命令"),
+    prompt_file: Optional[Path] = typer.Option(None, "--prompt-file", help="自定义 md 提示词文件"),
+    no_llm: bool = typer.Option(False, "--no-llm", help="不调模型，纯规则生成（离线可用）"),
+    bundle: bool = typer.Option(False, "--bundle", help="把视频+封面+文案复制进独立文件夹"),
+    concurrency: Optional[int] = typer.Option(None, "--concurrency", "-j"),
+    limit: Optional[int] = typer.Option(None, "--limit"),
+    force: bool = typer.Option(False, "--force", help="已有文案也重新生成"),
+    workdir: Optional[Path] = typer.Option(None, "--workdir", "-w"),
+    config: Optional[str] = typer.Option(None, "--config", "-c"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+    log_file: Optional[str] = typer.Option(None, "--log-file"),
+):
+    st = _boot(config, log_level, log_file)
+    if workdir:
+        st.paths.workdir = str(workdir)
+    from .pipeline import stage_publish
+
+    kws = [k.strip() for k in (keyword or "").split(",") if k.strip()]
+    plan = stage_publish(
+        st,
+        table,
+        text_column=column,
+        name_column=name_column,
+        video_column=video_column,
+        cover_column=cover_column,
+        title_column=title_column,
+        topic_column=topic_column,
+        out_dir=out_dir,
+        platforms=platforms,
+        provider=provider,
+        model=model,
+        prompt=prompt,
+        prompt_file=str(prompt_file) if prompt_file else None,
+        keywords=kws,
+        cover=str(cover) if cover else None,
+        sheet=sheet,
+        limit=limit,
+        concurrency=concurrency,
+        skip_existing=not force,
+        use_llm=not no_llm,
+        bundle=bundle,
+    )
+    console.print(f"[green]完成[/green] -> {plan}")
+    console.print("[dim]提示：视频号/抖音没有开放的发布接口，请到平台手动上传，素材在清单里。[/dim]")
+
+
 @app.command("run", help="一条龙：原始文案 -> 仿写 -> 配音 -> 视频")
 def run(
     media: Optional[Path] = typer.Argument(None, help="[media] 音视频目录；用其他来源时可省略"),

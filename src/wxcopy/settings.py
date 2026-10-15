@@ -57,6 +57,23 @@ class PathsCfg:
     text_dir: str = ""
     voice_dir: str = ""
     video_dir: str = ""
+    publish_dir: str = ""
+
+
+@dataclass
+class PublishCfg:
+    """发布素材包（标题 / 简介 / 话题）的默认偏好。
+
+    注意：短视频平台没有对普通开发者开放的「代用户发布」接口，
+    这里只准备「上传前要填的那些字」，最后一步仍要手动发布。
+    """
+
+    titles: int = 5  # 候选标题数量
+    desc_max: int = 100  # 简介最大字数
+    topics: int = 6  # 话题标签数量
+    platforms: str = "视频号,抖音"  # 清单里的默认平台
+    concurrency: int = 1
+    prompt: str = ""  # prompt 名或 md 路径，留空用内置 default
 
 
 @dataclass
@@ -220,6 +237,7 @@ class Settings:
     tts: TTSCfg = field(default_factory=TTSCfg)
     video: VideoCfg = field(default_factory=VideoCfg)
     ocr: OcrCfg = field(default_factory=OcrCfg)
+    publish: PublishCfg = field(default_factory=PublishCfg)
     run: RunCfg = field(default_factory=RunCfg)
     config_path: str = ""
 
@@ -243,6 +261,10 @@ class Settings:
     @property
     def video_dir(self) -> Path:
         return Path(self.paths.video_dir or self.workdir / "video").expanduser().resolve()
+
+    @property
+    def publish_dir(self) -> Path:
+        return Path(self.paths.publish_dir or self.workdir / "publish").expanduser().resolve()
 
     def provider(self, name: str | None = None) -> ProviderCfg:
         key = name or self.llm.provider
@@ -308,6 +330,7 @@ def load_settings(config: str | None = None) -> Settings:
         run=_take(raw.get("run") or {}, RunCfg),
         video=_take(raw.get("video") or {}, VideoCfg),
         ocr=_take(raw.get("ocr") or {}, OcrCfg),
+        publish=_take(raw.get("publish") or {}, PublishCfg),
         config_path=loaded_from,
     )
 

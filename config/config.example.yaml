@@ -8,6 +8,7 @@ paths:
   text_dir: ""             # 空则用 {workdir}/text
   voice_dir: ""            # 空则用 {workdir}/voice
   video_dir: ""            # 空则用 {workdir}/video
+  publish_dir: ""          # 空则用 {workdir}/publish（发布素材包与清单）
 
 # ---------- 1. 语音转文字 ----------
 asr:
@@ -180,6 +181,18 @@ video:
   fade_in: 0.0                 # 开头淡入秒数
   tail_pad: 0.6                # 语音结束后追加的静音秒数（尾部留白），避免最后一句字幕刚出来就黑屏
   concurrency: 1               # 同时合成几条
+
+# ---------- 发布素材包（`wxcopy publish`）----------
+# 视频号 / 抖音都没有对普通开发者开放的「代用户发布」接口，
+# 所以这里只生成「上传前要填的字」：标题候选 + 简介 + 话题，外加一份清单。
+# 最后一步仍然要手动到平台上传，别指望全自动发出去。
+publish:
+  titles: 5                    # 每条给几个候选标题
+  desc_max: 100                # 简介最大字数
+  topics: 6                    # 话题标签数量
+  platforms: 视频号,抖音        # 清单里的「平台」列默认值
+  concurrency: 1
+  prompt: ""                   # 自定义提示词名或 .md 路径，留空用内置
 
 run:
   concurrency: 1

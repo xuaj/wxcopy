@@ -617,6 +617,156 @@ def stage_video(
     return path
 
 
+def _pick_cover(row: dict, cover_col: str, cover_arg: str, name: str) -> str:
+    """封面优先取表格里的「封面」列，其次从 --cover 指定的目录里按名字找。"""
+    v = str(row.get(cover_col) or "").strip() if cover_col else ""
+    if v and Path(v).is_file():
+        return str(Path(v).resolve())
+    if cover_arg:
+        p = Path(cover_arg)
+        if p.is_file():
+            return str(p.resolve())
+        if p.is_dir():
+            for ext in (".png", ".jpg", ".jpeg", ".webp", ".bmp"):
+                hit = p / f"{name}{ext}"
+                if hit.is_file():
+                    return str(hit.resolve())
+    return ""
+
+
+def stage_publish(
+    settings: Settings,
+    table: Path | str,
+    *,
+    text_column: str = "仿写文案",
+    name_column: str | None = None,
+    video_column: str = "视频",
+    cover_column: str = "封面",
+    title_column: str = "推荐标题",
+    topic_column: str = "话题",
+    out_dir: Path | str | None = None,
+    platforms: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    prompt: str | None = None,
+    prompt_file: str | None = None,
+    keywords: list[str] | None = None,
+    cover: str | None = None,
+    sheet: str | None = None,
+    limit: int | None = None,
+    concurrency: int | None = None,
+    skip_existing: bool = True,
+    use_llm: bool = True,
+    bundle: bool = False,
+) -> Path:
+    """阶段五（可选）：成片 -> 发布素材包 + 清单。
+
+    注意这里**不发视频**：视频号、抖音都没有对普通开发者开放的「代用户发布」接口。
+    本阶段只把「上传前要填的字」（标题候选 / 简介 / 话题）准备好，
+    再给一份清单和可选的素材包目录，最后一步仍需手动到平台上传。
+    """
+    from .core.publish import PLAN_COLUMNS, generate_many, load_copy, plan_row, save_copy, write_bundle
+    from .core.publish import PublishCfg as CorePublishCfg
+    from .core.publish import load_prompt as load_publish_prompt
+
+    path = Path(table)
+    rows, columns = read_table(path, sheet=sheet)
+    if not rows:
+        raise ValueError(f"{path} 没有数据行")
+
+    src_col = resolve_column(columns, text_column)
+    name_col = resolve_column(columns, name_column) if name_column else _default_name_col(columns)
+    video_col = resolve_column(columns, video_column) if video_column in columns else ""
+    cover_col = resolve_column(columns, cover_column) if cover_column in columns else ""
+
+    if limit:
+        rows = rows[:limit]
+
+    cfg = CorePublishCfg(
+        titles=settings.publish.titles,
+        desc_max=settings.publish.desc_max,
+        topics=settings.publish.topics,
+        platforms=platforms or settings.publish.platforms,
+        concurrency=concurrency or settings.publish.concurrency,
+        prompt=prompt or prompt_file or settings.publish.prompt,
+    )
+    pdir = Path(out_dir) if out_dir else settings.publish_dir
+    pdir.mkdir(parents=True, exist_ok=True)
+
+    system = load_publish_prompt(prompt_file or settings.publish.prompt or prompt or "")
+
+    llm = None
+    if use_llm:
+        try:
+            llm = build_llm(settings, provider=provider, model=model)
+            log.info("发布文案模型：%s", llm.name)
+        except Exception as e:  # noqa: BLE001
+            log.warning("模型不可用（%s），改用规则生成标题/简介", str(e)[:100])
+    if llm is None:
+        log.info("发布文案：规则模式（无模型）")
+
+    # 断点续跑：已经出过文案的直接用上次的
+    names: list[str] = []
+    copies: dict[str, Any] = {}
+    todo: list[tuple[str, str]] = []
+    for i, r in enumerate(rows, 1):
+        name = _row_name(r, name_col, i)
+        names.append(name)
+        text = (r.get(src_col) or "").strip()
+        if not text:
+            continue
+        old = load_copy(pdir, name) if skip_existing else None
+        if old is not None:
+            copies[name] = old
+        else:
+            todo.append((name, text))
+
+    if todo:
+        log.info("待生成发布文案 %d 条（沿用已有 %d 条）", len(todo), len(names) - len(todo))
+        fresh = generate_many(todo, llm, cfg, keywords=keywords or [], system=system)
+        for name, c in fresh.items():
+            save_copy(pdir, name, c)
+        copies.update(fresh)
+    else:
+        log.info("发布文案 %d 条均已存在，跳过", len(names))
+
+    # 素材包（可选）+ 清单
+    plan: list[dict] = []
+    for i, (r, name) in enumerate(zip(rows, names), 1):
+        c = copies.get(name) or load_copy(pdir, name)
+        if c is None:
+            continue
+        video = str(r.get(video_col) or "").strip() if video_col else ""
+        if video and not Path(video).is_file():
+            found = settings.video_dir / f"{name}.mp4"
+            video = str(found) if found.is_file() else ""
+        cover_path = _pick_cover(r, cover_col, cover or "", name)
+        if bundle:
+            write_bundle(pdir, name, c, video=video, cover=cover_path)
+        plan.append(plan_row(i, name, c, video=video, cover=cover_path, platforms=cfg.platforms))
+
+    plan_path = pdir / "publish_plan.xlsx"
+    export_rows(plan_path, plan, PLAN_COLUMNS, sheet="发布清单")
+    log.info("发布清单已写入 %s（%d 行）", plan_path, len(plan))
+
+    # 回写表格，一表看全
+    if plan:
+        by_index = {p["序号"]: p for p in plan}
+        write_column(
+            path,
+            title_column,
+            [(i, by_index[i]["推荐标题"] if i in by_index else "") for i in range(1, len(rows) + 1)],
+            sheet=sheet,
+        )
+        write_column(
+            path,
+            topic_column,
+            [(i, by_index[i]["话题"] if i in by_index else "") for i in range(1, len(rows) + 1)],
+            sheet=sheet,
+        )
+    return plan_path
+
+
 def run_pipeline(
     settings: Settings,
     media: Path | str = "",
