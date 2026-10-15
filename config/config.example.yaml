@@ -100,6 +100,10 @@ tts:
   volume: +0%                  # 音量
   pitch: +0Hz
   format: mp3
+  # 合成时顺手记下每个字的真实时间点（旁挂 <名字>.cues.json）。
+  # 视频阶段的字幕会按这份时间轴排，而不是按字数均分——长文案下差别能到好几秒。
+  # 关掉则退回「按字数比例分配」，且不会产生额外的 json 文件。
+  cues: true
   openai:
     base_url: https://api.siliconflow.cn/v1
     api_key_env: SILICONFLOW_API_KEY

@@ -51,6 +51,7 @@ output_*/
 *.wav
 *.ass
 *.srt
+*.cues.json
 
 # ---- 本地配置（这些是个人覆盖，只提交 example）----
 config/config.yaml

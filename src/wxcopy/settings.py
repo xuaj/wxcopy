@@ -131,6 +131,7 @@ class TTSCfg:
     volume: str = "+0%"
     pitch: str = "+0Hz"
     format: str = "mp3"
+    cues: bool = True  # 记录逐字时间戳（<name>.cues.json），让字幕对齐真实语音
     openai: TTSOpenAICfg = field(default_factory=TTSOpenAICfg)
 
 

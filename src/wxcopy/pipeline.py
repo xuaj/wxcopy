@@ -16,7 +16,7 @@ from typing import Any
 from .core.llm import build_llm
 from .core.media import safe_stem
 from .core.rewriter import Rewriter, RewriteStyle, load_prompt
-from .core.tts import build_tts, synth_many
+from .core.tts import AUDIO_EXTS, build_tts, cues_path_of, supports_cues, synth_many
 from .io.table import export_rows, read_table, resolve_column, write_column
 from .logging_setup import get_logger
 from .settings import Settings
@@ -24,6 +24,27 @@ from .settings import Settings
 log = get_logger()
 
 ASR_COLUMNS = ["序号", "文件原名", "时长(秒)", "语言", "转写文案", "文案文件"]
+
+
+def _find_voice(voice_dir: Path, name: str) -> Path | None:
+    """在配音目录里按基础名找音频。
+
+    必须按音频后缀过滤：配音旁还挂着 `<name>.cues.json`（逐字时间戳），
+    不过滤的话 name.json 会排在 name.mp3 前面被当成音频。
+    """
+    hits = sorted(p for p in voice_dir.glob(f"{name}.*") if p.suffix.lower() in AUDIO_EXTS)
+    return hits[0] if hits else None
+
+
+def _cues_digest(audio: str) -> str:
+    """逐字时间戳的指纹：音频重录（语速/音色变了、时间轴变了）时让视频跟着重出。"""
+    if not audio:
+        return ""
+    p = cues_path_of(audio)
+    try:
+        return hashlib.sha1(p.read_bytes()).hexdigest()[:12] if p.is_file() else ""
+    except OSError:
+        return ""
 
 
 def _default_name_col(columns: list[str]) -> str:
@@ -358,8 +379,12 @@ def stage_tts(
         if not text:
             continue
         name = _row_name(r, name_col, i)
-        if skip_existing and any(voice_dir.glob(f"{name}.*")):
-            continue
+        if skip_existing:
+            hit = _find_voice(voice_dir, name)
+            # 有音频就跳过，除非「该产出逐字时间戳却没有」——那说明是旧版本录的，
+            # 字幕只能退回按字数均分，长文案会明显跑偏，这里重录一次补上。
+            if hit and not (supports_cues(tts) and not cues_path_of(hit).is_file()):
+                continue
         items.append((name, text))
 
     log.info("待合成 %d 条音频（跳过已存在的 %d 条）", len(items), len(rows) - len(items))
@@ -368,10 +393,7 @@ def stage_tts(
     final: list[tuple[Any, str]] = []
     for i, r in enumerate(rows, 1):
         name = _row_name(r, name_col, i)
-        hit = results.get(name)
-        if not hit:
-            found = sorted(voice_dir.glob(f"{name}.*"))
-            hit = found[0] if found else None
+        hit = results.get(name) or _find_voice(voice_dir, name)
         final.append((i, str(hit) if hit else ""))
 
     write_column(path, out_column, final, sheet=sheet)
@@ -422,9 +444,9 @@ _SIG_FIELDS = (
 )
 
 
-def _video_sig(text: str, cfg) -> str:
-    """文案 + 渲染参数的指纹。文案或参数任一变化 → 指纹变化 → 重出。"""
-    payload = {"t": text, "c": {k: getattr(cfg, k, None) for k in _SIG_FIELDS}}
+def _video_sig(text: str, cfg, cues_digest: str = "") -> str:
+    """文案 + 渲染参数 + 语音时间轴的指纹。任一变化 → 指纹变化 → 重出。"""
+    payload = {"t": text, "c": {k: getattr(cfg, k, None) for k in _SIG_FIELDS}, "a": cues_digest}
     blob = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
     return hashlib.sha1(blob.encode("utf-8")).hexdigest()
 
@@ -561,16 +583,14 @@ def stage_video(
         if not text:
             continue
         name = _row_name(r, name_col, i)
-        # 只认「文案 + 渲染参数都一样」的产物，否则改了参数会看到旧片
-        if skip_existing and _video_fresh(vdir, name, _video_sig(text, cfg)):
-            continue
         # 音频优先取表格里的「配音」列，取不到就按命名规则在 voice 目录里找
-        audio = ""
-        if audio_col:
-            audio = str(r.get(audio_col) or "").strip()
+        audio = str(r.get(audio_col) or "").strip() if audio_col else ""
         if not audio or not Path(audio).is_file():
-            found = sorted(settings.voice_dir.glob(f"{name}.*"))
-            audio = str(found[0]) if found else ""
+            found = _find_voice(settings.voice_dir, name)
+            audio = str(found) if found else ""
+        # 只认「文案 + 渲染参数 + 语音时间轴都一样」的产物，否则改了参数会看到旧片
+        if skip_existing and _video_fresh(vdir, name, _video_sig(text, cfg, _cues_digest(audio))):
+            continue
         items.append((name, text, audio))
 
     no_audio = sum(1 for _, _, a in items if not a)
@@ -578,11 +598,11 @@ def stage_video(
 
     results = make_many(items, vdir, cfg, concurrency=concurrency or v.concurrency)
 
-    # 记下每个成品对应的「文案 + 参数」指纹，下次据此判断「要不要重出」
-    for nm, text, _ in items:
+    # 记下每个成品对应的「文案 + 参数 + 时间轴」指纹，下次据此判断「要不要重出」
+    for nm, text, au in items:
         if (vdir / f"{nm}.mp4").is_file():
             try:
-                (vdir / f"{nm}.src.txt").write_text(_video_sig(text, cfg), encoding="utf-8")
+                (vdir / f"{nm}.src.txt").write_text(_video_sig(text, cfg, _cues_digest(au)), encoding="utf-8")
             except OSError as e:  # noqa: BLE001
                 log.warning("写入指纹失败 %s：%s", nm, str(e)[:80])
 

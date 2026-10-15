@@ -4,7 +4,8 @@
 
 - 背景用 scale+cover 裁剪铺满目标分辨率（默认 1080x1920 竖屏，适配视频号/抖音）
 - 字幕走 ASS（libass），中文渲染比 drawtext 更稳，支持描边与自动换行
-- 时间轴按字数占全文比例分配，保证字幕节奏跟着语音走
+- 时间轴优先用配音旁的逐字时间戳（``<name>.cues.json``，TTS 合成时生成），
+  没有时才退回按字数占全文比例分配——后者在长文案下会明显跑偏
 
 两套字幕样式：
 - ``classic``：底部居中整句小字，一行十几个字，适合信息型口播
@@ -322,6 +323,91 @@ def alloc_screen_timings(screens: list[list[str]], total: float) -> list[tuple[f
     return _alloc_by_weights([max(1, sum(len(ln) for ln in s)) for s in screens], total)
 
 
+# ---------- 按 TTS 逐字时间戳对齐（优先于按字数均分）----------
+
+
+def _reading_chars(text: str) -> str:
+    """只保留有读音的字符（去掉标点与空白），用来和时间戳做序列对齐。"""
+    return "".join(ch for ch in text if ch.isalnum())
+
+
+def _cue_char_times(cues: list[tuple[str, float]]) -> list[tuple[str, float]]:
+    """把词级时间戳展开成字级。
+
+    edge 的 WordBoundary 有时按词给（「视频」「星标」），有时按字给。
+    一个词里的几个字平均分这段时间，断行刚好落在词中间时才不会整体提前。
+    """
+    items = [(w, float(t)) for w, t in cues if _reading_chars(w)]
+    out: list[tuple[str, float]] = []
+    for i, (w, t) in enumerate(items):
+        chars = _reading_chars(w)
+        end = items[i + 1][1] if i + 1 < len(items) else t
+        step = (end - t) / len(chars) if end > t else 0.0
+        out.extend((ch, t + k * step) for k, ch in enumerate(chars))
+    return out
+
+
+def align_timings(
+    groups: list[str], cues: list[tuple[str, float]] | None, total: float
+) -> list[tuple[float, float]] | None:
+    """用 TTS 逐字时间戳给每个「组」分配时间段。
+
+    组可以是 classic 的一行，也可以是 big 的一屏：组的起点 = 该组第一个字的
+    真实发声时刻，终点 = 下一组起点（最后一组铺到 total）。
+
+    按字数均分之所以会跑偏，是因为 TTS 在标点处要停顿，字符速率并不均匀；
+    长文案下半段能差出好几秒。时间戳缺失或和文案差太多时返回 None，
+    调用方回退到按字数均分。
+    """
+    if not groups or not cues:
+        return None
+    cue_chars = _cue_char_times(cues)
+    if not cue_chars:
+        return None
+
+    group_chars = [_reading_chars(g) for g in groups]
+    flat = "".join(group_chars)
+    if not flat:
+        return None
+
+    cue_text = "".join(ch for ch, _ in cue_chars)
+    if flat == cue_text:
+        pos = list(range(len(flat)))
+    else:
+        import difflib
+
+        sm = difflib.SequenceMatcher(None, flat, cue_text, autojunk=False)
+        ratio = sm.ratio()
+        if ratio < 0.6:
+            log.warning("逐字时间戳与文案差异过大（相似度 %.2f），改回按字数分配字幕时间", ratio)
+            return None
+        pos = [-1] * len(flat)
+        for blk in sm.get_matching_blocks():
+            for k in range(blk.size):
+                pos[blk.a + k] = blk.b + k
+
+    # 每个组的起点 = 组内第一个「能对上时间」的字
+    starts: list[float] = []
+    last = 0.0
+    n = 0
+    for g in group_chars:
+        hit = next((pos[p] for p in range(n, n + len(g)) if pos[p] >= 0), -1)
+        st = cue_chars[hit][1] if hit >= 0 else last
+        st = max(float(st), last)  # 保证单调不减
+        starts.append(st)
+        last = st
+        n += len(g)
+
+    span = max(float(total), starts[-1] + 0.001)
+    out: list[tuple[float, float]] = []
+    for k, st in enumerate(starts):
+        en = starts[k + 1] if k + 1 < len(starts) else span
+        if en <= st:
+            en = st + 0.05
+        out.append((round(st, 3), round(min(en, span), 3)))
+    return out
+
+
 # ---------- 关键词高亮 ----------
 def _find_highlight_spans(line: str, cfg: VideoCfg, partial: bool = False) -> list[tuple[int, int]]:
     """返回该行里需要染高亮色的 [起, 止) 区间，已去重叠。
@@ -485,16 +571,23 @@ def big_font_size_of(cfg: VideoCfg) -> int:
 
 
 def write_ass(
-    lines: list[str], timings: list[tuple[float, float]], path: Path, cfg: VideoCfg, total: float | None = None
+    lines: list[str],
+    timings: list[tuple[float, float]],
+    path: Path,
+    cfg: VideoCfg,
+    total: float | None = None,
+    cues: list[tuple[str, float]] | None = None,
 ) -> Path:
     """按 cfg.style 生成 ASS。
 
     classic：一行一条 Dialogue，按 timings 依次显示。
     big    ：按「每屏 N 行」分组，同屏的行用 \\pos 摆在中上部并同时出现。
+
+    ``cues`` 为 TTS 逐字时间戳；给了就按真实语音对齐（big 样式内部自行分配）。
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     if (cfg.style or "classic").lower() == "big":
-        return _write_ass_big(lines, path, cfg, total)
+        return _write_ass_big(lines, path, cfg, total, cues=cues)
     head = _ass_head(cfg, cfg.font_size, cfg.align, cfg.margin_v, cfg.outline)
     fade = _fade_tag(cfg)
     body = "".join(
@@ -548,7 +641,13 @@ def _big_dialogues(
     return out
 
 
-def _write_ass_big(lines: list[str], path: Path, cfg: VideoCfg, total: float | None = None) -> Path:
+def _write_ass_big(
+    lines: list[str],
+    path: Path,
+    cfg: VideoCfg,
+    total: float | None = None,
+    cues: list[tuple[str, float]] | None = None,
+) -> Path:
     """中上部超大粗体短句 + 隔行/关键词高亮，复刻主流爆款口播号字幕。"""
     font_size = big_font_size_of(cfg)
     outline = max(2.0, round(font_size * 0.028, 1))  # 描边随字号等比缩放
@@ -562,10 +661,13 @@ def _write_ass_big(lines: list[str], path: Path, cfg: VideoCfg, total: float | N
         path.write_text(head, encoding="utf-8")
         return path
 
+    # 有逐字时间戳就按真实语音排，否则退回按字数均分
+    timings = align_timings(["".join(s) for s in screens], cues, total) or alloc_screen_timings(screens, total)
+
     # 打字机是硬切换，带淡入反而糊，直接关掉
     fade = "" if cfg.typewriter else _fade_tag(cfg)
     body: list[str] = []
-    for (st, en), screen in zip(alloc_screen_timings(screens, total), screens):
+    for (st, en), screen in zip(timings, screens):
         body += _big_dialogues(screen, st, en, cfg, y0, line_h, cx, fade)
     path.write_text(head + "".join(body), encoding="utf-8")
     return path
@@ -624,6 +726,11 @@ def make_video(
     bg_args, _ = _bg_input(cfg, dur)
     chain = [_bg_filter(cfg), f"fps={cfg.fps}"]
 
+    # 配音旁的逐字时间戳（合成时由 edge-tts 的 WordBoundary 记下）
+    from .tts import read_cues
+
+    cues = read_cues(audio)
+
     ass_rel = None
     if cfg.subtitle and text.strip():
         is_big = (cfg.style or "classic").lower() == "big"
@@ -635,7 +742,19 @@ def make_video(
         # 字幕只铺满语音部分，尾部留白不压字
         total = max(1.0, dur)
         timings = alloc_timings(lines, total)
-        ass = write_ass(lines, timings, workdir / (out_path.stem + ".ass"), cfg, total=total)
+        if cues:
+            aligned = align_timings(lines, cues, total)
+            if aligned:
+                timings = aligned
+            log.info(
+                "   %s 字幕时间轴：%s（%d 个字的时间戳）",
+                out_path.name,
+                "按 TTS 逐字时间戳对齐" if aligned else "按字数比例分配",
+                len(cues),
+            )
+        else:
+            log.info("   %s 字幕时间轴：按字数比例分配（无逐字时间戳）", out_path.name)
+        ass = write_ass(lines, timings, workdir / (out_path.stem + ".ass"), cfg, total=total, cues=cues)
         ass_rel = ass.name
         chain.append(f"subtitles=f='{ass_rel}':fontsdir='C\\:/Windows/Fonts'")
 

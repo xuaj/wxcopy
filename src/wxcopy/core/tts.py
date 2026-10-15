@@ -8,20 +8,70 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from ..logging_setup import get_logger
 from ..settings import Settings, TTSCfg, api_key_of
+from .media import probe_duration
 
 log = get_logger()
 
 MAX_EDGE_CHARS = 3000  # 单次合成的安全长度，超长会分片
+CUES_SUFFIX = ".cues.json"  # 配音旁挂的逐字时间戳
+AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".opus", ".flac"}
 
 
 class TTSError(RuntimeError):
     pass
+
+
+# ---------------------------------------------------------------- 逐字时间戳
+# edge-tts 在合成时会回吐 WordBoundary 事件（每个字的 offset/duration），
+# 存成旁挂 json 后，视频阶段就能按「真实语音时间轴」排字幕，而不是按字数猜。
+# 这是字幕不跑偏的关键：TTS 在标点处有停顿，字符速率并不均匀。
+
+
+def cues_path_of(audio: Path | str) -> Path:
+    """配音音频对应的逐字时间戳文件路径（``001_x.mp3`` -> ``001_x.cues.json``）。"""
+    return Path(audio).with_suffix(CUES_SUFFIX)
+
+
+def read_cues_raw(audio: Path | str) -> list[dict]:
+    """读原始 cues 记录 ``[{w,t,d}, ...]``；缺失或损坏一律返回空列表。"""
+    p = cues_path_of(audio)
+    if not p.is_file():
+        return []
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:  # noqa: BLE001
+        log.warning("逐字时间戳不可用 %s：%s", p.name, str(e)[:80])
+        return []
+    return [it for it in data if isinstance(it, dict) and str(it.get("w", "")).strip()]
+
+
+def write_cues(audio: Path | str, cues: list[dict]) -> Path | None:
+    """把逐字时间戳写到音频旁挂文件；空列表则不落盘。"""
+    if not cues:
+        return None
+    p = cues_path_of(audio)
+    try:
+        p.write_text(json.dumps(cues, ensure_ascii=False), encoding="utf-8")
+    except OSError as e:  # noqa: BLE001
+        log.warning("逐字时间戳写入失败 %s：%s", p.name, str(e)[:80])
+        return None
+    return p
+
+
+def read_cues(audio: Path | str) -> list[tuple[str, float]]:
+    """读逐字时间戳 -> ``[(字, 起始秒)]``，供视频阶段对齐字幕。"""
+    return [(str(it["w"]), float(it.get("t", 0.0))) for it in read_cues_raw(audio)]
+
+
+def has_cues(audio: Path | str) -> bool:
+    return cues_path_of(audio).is_file()
 
 
 class BaseTTS(ABC):
@@ -63,26 +113,61 @@ class EdgeTTS(BaseTTS):
         rate = kw.get("rate") or self.cfg.rate
         volume = kw.get("volume") or self.cfg.volume
         pitch = kw.get("pitch") or self.cfg.pitch
+        # 默认开：逐字时间戳是「字幕和语音对得上」的唯一依据
+        want_cues = bool(getattr(self.cfg, "cues", True))
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
-        async def _run():
-            comm = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
-            await comm.save(str(out_path))
+        async def _run() -> list[dict]:
+            comm = edge_tts.Communicate(
+                text,
+                voice,
+                rate=rate,
+                volume=volume,
+                pitch=pitch,
+                boundary="WordBoundary" if want_cues else "SentenceBoundary",
+            )
+            if not want_cues:
+                await comm.save(str(out_path))
+                return []
+            cues: list[dict] = []
+            with open(out_path, "wb") as f:
+                async for chunk in comm.stream():
+                    kind = chunk.get("type")
+                    if kind == "audio":
+                        f.write(chunk["data"])
+                    elif kind == "WordBoundary":
+                        cues.append(
+                            {
+                                "w": str(chunk.get("text", "")),
+                                "t": round(float(chunk.get("offset", 0)) / 1e7, 4),
+                                "d": round(float(chunk.get("duration", 0)) / 1e7, 4),
+                            }
+                        )
+            return cues
 
-        asyncio.run(_run())
+        cues = asyncio.run(_run())
+        write_cues(out_path, cues)
         return out_path
 
     def synth_long(self, text: str, out_path: Path, **kw) -> Path:
-        """超长文本分成多段分别合成，再按顺序拼接。"""
+        """超长文本分成多段分别合成，再按顺序拼接（时间戳按累计时长顺移）。"""
         parts = self.split_text(text)
         if len(parts) <= 1:
             return self.synth(text, out_path, **kw)
         tmp_files = []
+        merged: list[dict] = []
+        offset = 0.0
         for i, part in enumerate(parts):
-            tmp_files.append(self.synth(part, out_path.with_name(f"{out_path.stem}_p{i}{out_path.suffix}"), **kw))
+            tmp = self.synth(part, out_path.with_name(f"{out_path.stem}_p{i}{out_path.suffix}"), **kw)
+            for it in read_cues_raw(tmp):
+                merged.append({"w": it["w"], "t": round(float(it.get("t", 0.0)) + offset, 4), "d": it.get("d", 0.0)})
+            offset += probe_duration(tmp) or 0.0
+            cues_path_of(tmp).unlink(missing_ok=True)
+            tmp_files.append(tmp)
         _concat_audio(tmp_files, out_path)
         for f in tmp_files:
             f.unlink(missing_ok=True)
+        write_cues(out_path, merged)
         return out_path
 
 
@@ -164,6 +249,11 @@ def _concat_audio(files: list[Path], out_path: Path) -> Path:
     subprocess.run(cmd, check=True)
     lst.unlink(missing_ok=True)
     return out_path
+
+
+def supports_cues(tts: BaseTTS) -> bool:
+    """该引擎这次合成会不会产出逐字时间戳（目前只有 edge 有）。"""
+    return isinstance(tts, EdgeTTS) and bool(getattr(tts.cfg, "cues", True))
 
 
 def build_tts(settings: Settings, voice: str | None = None) -> BaseTTS:
