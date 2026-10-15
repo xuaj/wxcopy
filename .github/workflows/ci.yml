@@ -12,6 +12,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Windows runner 默认是 PowerShell，而下面的脚本用了 bash 语法
+# （多行命令、\ 续行）。统一指定 bash，避免两套 shell 行为不一致。
+defaults:
+  run:
+    shell: bash
+
 jobs:
   test:
     name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
@@ -47,8 +53,7 @@ jobs:
           # 全程不碰 ASR / ffmpeg / 模型调用，只需要下面这几个。
           # 装上 torch 的话这一步要从 1 分钟变成 10 分钟以上。
           pip install --no-deps -e .
-          pip install "pandas>=2.0" "openpyxl>=3.1" "PyYAML>=6.0" "rich>=13.7" \
-                      "pytest>=8.0" "ruff>=0.6,<1.0"
+          pip install "pandas>=2.0" "openpyxl>=3.1" "PyYAML>=6.0" "rich>=13.7" "pytest>=8.0" "ruff>=0.6,<1.0"
 
       - name: 静态检查（ruff lint）
         run: ruff check --output-format=github .
