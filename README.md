@@ -1,5 +1,9 @@
 # wxcopy · 视频号文案流水线
 
+[![CI](https://github.com/xuaj/wxcopy/actions/workflows/ci.yml/badge.svg)](https://github.com/xuaj/wxcopy/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 把对标视频批量变成自己的原创口播短视频，四个阶段一条链跑完：
 
 ```
@@ -607,10 +611,25 @@ pytest -q -k "merge"                     # 按名字挑
 ### 代码规范
 
 ```bash
-ruff check . && ruff format --check .
+ruff check .        # lint
+ruff format .       # 格式化（提交前跑一下）
+ruff format --check .   # 只检查不改
 ```
 
 约定：`line-length = 120`，Python 3.11+ 语法（`X | None` 写法）。
+
+### CI
+
+推送 / PR 到 `main` 会自动跑（见 `.github/workflows/ci.yml`）：
+
+- **ruff lint** + **ruff format --check**
+- **pytest**，矩阵：Ubuntu × Python 3.11/3.12，外加 Windows × 3.11
+  （Windows 是因为 `safe_stem` 的路径分隔符处理在两套系统上语义不同）
+
+CI 里刻意用 `pip install --no-deps` 跳过了 `faster-whisper`：它会拖进
+torch（2GB+），而单元测试全程不碰 ASR / ffmpeg / 模型，装了纯属浪费
+（装 torch 的话 CI 要从 1 分钟变成 10 分钟以上）。
+测试实际只需要 `pandas / openpyxl / PyYAML / rich` 四个运行时依赖。
 
 ### 加一个新阶段
 
