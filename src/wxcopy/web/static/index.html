@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wxcopy · 视频号文案流水线</title>
+<style>
+:root{
+  --bg:#f4f6f9; --card:#fff; --bd:#e3e8ef; --bd2:#eef2f7;
+  --tx:#1f2937; --tx2:#64748b; --tx3:#94a3b8;
+  --pri:#2563eb; --pri-d:#1d4ed8; --pri-l:#eff6ff;
+  --ok:#059669; --ok-l:#ecfdf5; --warn:#d97706; --err:#dc2626; --err-l:#fef2f2;
+  --r:10px; --sh:0 1px 3px rgba(15,23,42,.06),0 1px 2px rgba(15,23,42,.04);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
+header{background:var(--card);border-bottom:1px solid var(--bd);padding:14px 24px;
+  display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:10}
+header h1{margin:0;font-size:17px;font-weight:600}
+header .sub{color:var(--tx3);font-size:12px}
+.pill{margin-left:auto;font-size:12px;padding:4px 10px;border-radius:999px;
+  background:var(--ok-l);color:var(--ok);border:1px solid #a7f3d0}
+main{max-width:1280px;margin:0 auto;padding:20px;display:grid;
+  grid-template-columns:minmax(0,440px) minmax(0,1fr);gap:18px;align-items:start}
+@media(max-width:1000px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);
+  box-shadow:var(--sh);margin-bottom:16px;overflow:hidden}
+.card>h2{margin:0;padding:12px 16px;font-size:14px;font-weight:600;
+  border-bottom:1px solid var(--bd2);background:#fbfcfe;display:flex;align-items:center;gap:8px}
+.card>h2 .n{width:20px;height:20px;border-radius:6px;background:var(--pri);color:#fff;
+  font-size:12px;display:grid;place-items:center;flex:none}
+.bd{padding:14px 16px}
+label{display:block;font-size:12px;color:var(--tx2);margin:12px 0 5px;font-weight:500}
+label:first-child{margin-top:0}
+.row{display:flex;gap:8px}
+input[type=text],input[type=number],select,textarea{width:100%;padding:8px 10px;border:1px solid var(--bd);
+  border-radius:8px;background:#fff;color:var(--tx);font-size:13px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--pri);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+select{cursor:pointer}
+textarea{resize:vertical;line-height:1.6;font-family:inherit}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.hint{font-size:11px;color:var(--tx3);margin-top:5px}
+.hint code{background:#f1f5f9;padding:1px 5px;border-radius:4px;color:var(--tx2);
+  font:11px ui-monospace,Consolas,monospace;word-break:break-all}
+button{padding:8px 14px;border:1px solid var(--bd);background:#fff;color:var(--tx);
+  border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;white-space:nowrap}
+button:hover:not(:disabled){background:#f8fafc;border-color:#cbd5e1}
+button:disabled{opacity:.5;cursor:not-allowed}
+button.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+button.pri:hover:not(:disabled){background:var(--pri-d);border-color:var(--pri-d)}
+button.sm{padding:5px 9px;font-size:12px}
+button.danger{color:var(--err);border-color:#fecaca;background:var(--err-l)}
+.btn-row{display:flex;gap:10px;align-items:center;padding:14px 16px;border-top:1px solid var(--bd2);background:#fbfcfe}
+/* 进度 */
+.bar{height:8px;background:#e8edf3;border-radius:99px;overflow:hidden;margin:10px 0 6px}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--pri),#60a5fa);
+  width:0;transition:width .3s;border-radius:99px}
+.met{display:flex;justify-content:space-between;font-size:12px;color:var(--tx2)}
+.met b{color:var(--tx);font-weight:600}
+.stage{font-size:12px;color:var(--tx2);margin-top:8px}
+.stage span{background:var(--pri-l);color:var(--pri-d);padding:2px 8px;border-radius:6px;font-weight:600}
+/* 日志 */
+.logs{height:340px;overflow:auto;background:#0f172a;color:#cbd5e1;padding:12px;
+  font:12px/1.7 ui-monospace,"Cascadia Code",Consolas,monospace;border-radius:8px;white-space:pre-wrap}
+.logs .l-info{color:#cbd5e1}.logs .l-warning{color:#fbbf24}.logs .l-error{color:#f87171}
+.logs .t{color:#64748b;margin-right:6px}
+.empty{color:var(--tx3);text-align:center;padding:40px 0;font-size:13px}
+/* 目录选择器 */
+.mask{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;
+  place-items:center;z-index:50;padding:20px}
+.mask.on{display:grid}
+.modal{background:#fff;border-radius:12px;width:min(680px,100%);max-height:80vh;display:flex;flex-direction:column}
+.modal header{position:static;border-bottom:1px solid var(--bd);padding:12px 16px;
+  display:flex;align-items:center;gap:10px}
+.modal header h3{margin:0;font-size:14px;flex:1}
+.tree{flex:1;overflow:auto;padding:8px}
+.tree .i{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13px}
+.tree .i:hover{background:#f1f5f9}
+.tree .i.sel{background:var(--pri-l);color:var(--pri-d);font-weight:600}
+.tree .i .cnt{margin-left:auto;font-size:11px;color:var(--tx3)}
+.tree .up{color:var(--tx2);font-size:12px;border-bottom:1px solid var(--bd2);margin-bottom:4px}
+.crumb{font:12px ui-monospace,Consolas,monospace;color:var(--tx2);background:#f8fafc;
+  padding:7px 12px;border-radius:6px;word-break:break-all;margin-bottom:8px}
+/* 产物 */
+.out{display:grid;gap:8px}
+.out .o{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--bd);
+  border-radius:8px;background:#fbfcfe;font-size:12px}
+.out .o .p{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font:12px ui-monospace,Consolas,monospace;color:var(--tx2)}
+.tag{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--pri-l);color:var(--pri-d)}
+.tag.ok{background:var(--ok-l);color:var(--ok)}.tag.err{background:var(--err-l);color:var(--err)}
+.warnbox{background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:9px 12px;
+  border-radius:8px;font-size:12px;margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📝 wxcopy 控制台</h1>
+  <span class="sub">视频转文案 → 多模型仿写 → 文案配音 → 口播视频</span>
+  <span class="pill" id="pill">● 就绪</span>
+</header>
+
+<main>
+  <!-- ============ 左：配置 ============ -->
+  <div>
+    <div class="card">
+      <h2><span class="n">1</span>选择原始文案来源</h2>
+      <div class="bd">
+        <label>来源类型</label>
+        <select id="srcKind" onchange="onSrcKindChange()"></select>
+        <div class="hint" id="srcHint"></div>
+
+        <!-- ===== 音视频目录 ===== -->
+        <div id="srcMedia" style="margin-top:10px">
+          <label>视频目录</label>
+          <div class="row">
+            <input type="text" id="media" placeholder="例如 D:\data\test">
+            <button class="sm" onclick="openPicker('media')">浏览…</button>
+          </div>
+          <div class="hint" id="mediaHint">支持包含 mp4/mov/mkv/mp3 等音视频的文件夹</div>
+        </div>
+
+        <!-- ===== 手输文案 ===== -->
+        <div id="srcText" style="margin-top:10px;display:none">
+          <label>文案内容</label>
+          <textarea id="srcTextBody" rows="7"
+            placeholder="直接把要仿写的文案粘进来，或自己写一段。例如：&#10;小店没客流怎么办？三招把路人变成回头客……"></textarea>
+          <div class="row" style="margin-top:8px">
+            <span class="hint" id="srcTextCount" style="flex:none">0 字</span>
+          </div>
+          <label>命名（可选，用于给产物文件起名）</label>
+          <input type="text" id="srcTextName" placeholder="留空自动取前 14 个字">
+        </div>
+
+        <!-- ===== 图片 OCR ===== -->
+        <div id="srcImage" style="margin-top:10px;display:none">
+          <label>图片文件或目录</label>
+          <div class="row">
+            <input type="text" id="srcImg" placeholder="例如 D:\素材\文案长图.png 或装图的文件夹">
+            <button class="sm" onclick="openPicker('srcImg','file','image')">浏览…</button>
+          </div>
+          <div class="hint">截图、长图、商品详情页都可以；目录里每张图各出一条文案</div>
+          <div class="g2" style="margin-top:10px">
+            <div>
+              <label>OCR 引擎</label>
+              <select id="srcOcrProv"></select>
+            </div>
+            <div>
+              <label>视觉模型（云端/本地大模型才需要）</label>
+              <input type="text" id="srcOcrModel" placeholder="例如 qwen2.5vl:7b">
+            </div>
+          </div>
+          <div class="hint" id="srcOcrHint"></div>
+        </div>
+
+        <!-- ===== Excel / CSV ===== -->
+        <div id="srcTable" style="margin-top:10px;display:none">
+          <label>表格文件</label>
+          <div class="row">
+            <input type="text" id="srcTbl" placeholder="例如 D:\data\待仿写文案.xlsx">
+            <button class="sm" onclick="openPicker('srcTbl','file','table')">浏览…</button>
+          </div>
+          <div class="g2" style="margin-top:10px">
+            <div>
+              <label>文案所在列</label>
+              <select id="srcTblCol"></select>
+            </div>
+            <div>
+              <label>命名列（可选）</label>
+              <select id="srcTblName"></select>
+            </div>
+          </div>
+          <div class="hint" id="srcTblHint">选好文件后自动读取列名</div>
+        </div>
+
+        <div class="g2" style="margin-top:12px">
+          <div>
+            <label>输出目录</label>
+            <div class="row">
+              <input type="text" id="workdir" placeholder="./output">
+              <button class="sm" onclick="openPicker('workdir')">…</button>
+            </div>
+            <div class="hint" id="outHint"></div>
+          </div>
+          <div>
+            <label>只处理前 N 个（空=全部）</label>
+            <input type="number" id="limit" min="1" placeholder="不限">
+          </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--tx2)">
+          <input type="checkbox" id="recursive" style="width:auto"> 递归子目录
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="n">2</span>选择模型</h2>
+      <div class="bd">
+        <label>模型厂商</label>
+        <select id="provider" onchange="onProviderChange()"></select>
+        <div class="hint" id="provHint"></div>
+
+        <label>具体模型</label>
+        <select id="model"></select>
+
+        <div class="g2" style="margin-top:12px">
+          <div>
+            <label>温度（0.6 稳 / 1.0 活）</label>
+            <input type="number" id="temperature" step="0.05" min="0" max="2">
+          </div>
+          <div>
+            <label>并发数</label>
+            <input type="number" id="concurrency" min="1" max="16">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="n">3</span>仿写风格</h2>
+      <div class="bd">
+        <label>风格模板</label>
+        <select id="prompt"></select>
+        <div class="hint" id="promptHint"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="n">4</span>配音设置</h2>
+      <div class="bd">
+        <div class="g2">
+          <div>
+            <label>引擎</label>
+            <select id="ttsProvider">
+              <option value="edge">edge（免费·联网）</option>
+              <option value="openai">云端 OpenAI 兼容</option>
+              <option value="pyttsx3">pyttsx3（离线）</option>
+            </select>
+          </div>
+          <div>
+            <label>音色</label>
+            <select id="voice"></select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="n">5</span>输出视频（口播短视频）</h2>
+      <div class="bd">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2)">
+          <input type="checkbox" id="vEnabled" style="width:auto" onchange="toggleVideo()">
+          在配音之后，用「仿写文案 + 配音」合成带字幕的视频
+        </label>
+        <div id="vBox" style="display:none">
+          <label>视频背景（图片或视频；留空用纯色）</label>
+          <div class="row">
+            <input type="text" id="vBg" placeholder="例如 D:\素材\背景.jpg 或 D:\素材\背景.mp4">
+            <button class="sm" onclick="openPicker('vBg','file','bg')">浏览…</button>
+          </div>
+          <div class="hint" id="vBgHint">图片会被裁剪铺满画面；视频背景会循环播放到语音结束</div>
+
+          <div class="g2" style="margin-top:12px">
+            <div>
+              <label>画面尺寸</label>
+              <select id="vSize"></select>
+            </div>
+            <div>
+              <label>填充方式</label>
+              <select id="vFit">
+                <option value="cover">cover · 裁满（推荐）</option>
+                <option value="contain">contain · 居中留边</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="g2" style="margin-top:12px">
+            <div>
+              <label>纯色背景色（无背景文件时生效）</label>
+              <input type="text" id="vColor" placeholder="#1e293b">
+            </div>
+            <div>
+              <label>合成并发数</label>
+              <input type="number" id="vConc" min="1" max="8">
+            </div>
+          </div>
+
+          <label style="display:flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;color:var(--tx2)">
+            <input type="checkbox" id="vSub" style="width:auto" onchange="onStyleChange()"> 烧录字幕
+          </label>
+
+          <div style="margin-top:10px">
+            <label>字幕样式</label>
+            <select id="vStyle" onchange="onStyleChange()"></select>
+            <div class="hint" id="vStyleHint"></div>
+          </div>
+
+          <!-- ===== classic：底部整句 ===== -->
+          <div id="vClassicBox">
+            <div class="g2" style="margin-top:10px">
+              <div>
+                <label>字号</label>
+                <input type="number" id="vFontSize" min="20" max="200">
+              </div>
+              <div>
+                <label>每行最多字数</label>
+                <input type="number" id="vCPL" min="6" max="40">
+              </div>
+            </div>
+            <div class="g2" style="margin-top:10px">
+              <div>
+                <label>字幕距底部（像素）</label>
+                <input type="number" id="vMargin" min="0" max="1800">
+              </div>
+              <div>
+                <label>加粗</label>
+                <select id="vBold"><option value="0">常规</option><option value="1">加粗</option></select>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== big：中上部大字 + 关键词高亮 ===== -->
+          <div id="vBigBox" style="display:none">
+            <div class="g2" style="margin-top:10px">
+              <div>
+                <label>高亮方式</label>
+                <select id="vHl" onchange="onHlChange()"></select>
+              </div>
+              <div>
+                <label>高亮颜色</label>
+                <div class="row">
+                  <input type="color" id="vHlColor" style="width:44px;height:34px;padding:2px;flex:none">
+                  <input type="text" id="vHlHex" placeholder="#00F090">
+                </div>
+              </div>
+            </div>
+            <div id="vKwRow" style="display:none">
+              <label>高亮关键词（逗号分隔）</label>
+              <input type="text" id="vKw" placeholder="例如：免费,省钱,风口,一桌一码">
+            </div>
+            <div class="g2" style="margin-top:10px">
+              <div>
+                <label>每行最多字数</label>
+                <input type="number" id="vBigCPL" min="2" max="12">
+              </div>
+              <div>
+                <label>每屏最多几行</label>
+                <input type="number" id="vBigLPS" min="1" max="5">
+              </div>
+            </div>
+            <div class="g2" style="margin-top:10px">
+              <div>
+                <label>字号（0 = 按宽度自适应）</label>
+                <input type="number" id="vBigSize" min="0" max="400">
+              </div>
+              <div>
+                <label>加粗</label>
+                <select id="vBigBold"><option value="1">加粗（推荐）</option><option value="0">常规</option></select>
+              </div>
+            </div>
+
+            <!-- ===== 打字机 ===== -->
+            <div style="margin-top:12px;border-top:1px dashed var(--bd2);padding-top:10px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2)">
+                <input type="checkbox" id="vTypewriter" style="width:auto" onchange="onTyChange()">
+                打字机效果（大字一个一个打出来）
+              </label>
+              <div id="vTyBox" class="g2" style="display:none;margin-top:8px">
+                <div>
+                  <label>节奏</label>
+                  <select id="vTyMode" onchange="onTyChange()">
+                    <option value="auto">自适应（跟语音同步，推荐）</option>
+                    <option value="fixed">固定每字秒数</option>
+                  </select>
+                </div>
+                <div id="vTyFixedBox" style="display:none">
+                  <label>每字秒数</label>
+                  <input type="number" id="vTySpeed" step="0.01" min="0.02" max="1" value="0.08">
+                </div>
+                <div id="vTyAutoBox">
+                  <label>打完停留占屏比例</label>
+                  <input type="number" id="vTyHold" step="0.05" min="0" max="0.9" value="0.3">
+                </div>
+              </div>
+              <div class="hint">打字机按「累计前缀」逐字渲染：每多一个字就多一条字幕事件，
+                关键词从第一个字起就染高亮色，打完整行后保持到本屏结束。
+                自适应会按本屏语音时长反推每字秒数（下限 <code>type_min</code>）。</div>
+            </div>
+
+            <div class="hint">大字样式默认：每行 4 字、每屏 3 行、字号＝画面宽 ×14.7%、
+              粗黑体、首行隔行染高亮色。高亮色支持 <code>#00F090</code> 或 ASS 的 <code>&amp;H0090F000</code>。</div>
+          </div>
+
+          <div class="g2" style="margin-top:10px">
+            <div>
+              <label>尾部留白（秒）</label>
+              <input type="number" id="vTail" step="0.1" min="0" max="5">
+            </div>
+            <div>
+              <label>开头淡入（秒）</label>
+              <input type="number" id="vFade" step="0.1" min="0" max="3">
+            </div>
+          </div>
+          <div class="g2" style="margin-top:10px">
+            <div>
+              <label>画质 CRF（越小越清晰）</label>
+              <input type="number" id="vCrf" min="14" max="32">
+            </div>
+            <div></div>
+          </div>
+          <div class="hint">合成用 ffmpeg 本地转码，1080×1920 一条约 5~20 秒（视 CPU）。
+            视频长度 = 配音时长 + 尾部留白，画面会自动跟着语音走，不会把音频截断。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="n">6</span>转写设置</h2>
+      <div class="bd">
+        <div class="g2">
+          <div>
+            <label>Whisper 模型</label>
+            <select id="asrModel">
+              <option value="tiny">tiny（最快·最差）</option>
+              <option value="base">base</option>
+              <option value="small">small（推荐起步）</option>
+              <option value="medium">medium（更准·更慢）</option>
+              <option value="large-v3">large-v3（最准·很慢）</option>
+            </select>
+          </div>
+          <div>
+            <label>语言</label>
+            <input type="text" id="language" placeholder="zh">
+          </div>
+        </div>
+        <div class="hint">本机无独立显卡，模型越大越慢。small 约 35 秒/个，medium 约 2~4 分钟/个。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 右：运行 ============ -->
+  <div>
+    <div class="card">
+      <h2>运行</h2>
+      <div class="bd">
+        <div class="bar"><i id="bar"></i></div>
+        <div class="met">
+          <span>阶段：<b id="stageText">未开始</b></span>
+          <span><b id="cnt">0 / 0</b></span>
+        </div>
+        <div class="stage" id="stageBox"></div>
+        <div id="warn"></div>
+      </div>
+      <div class="btn-row">
+        <button class="pri" id="btnRun" onclick="startJob()">▶ 开始处理</button>
+        <button class="danger" id="btnCancel" onclick="cancelJob()" disabled>■ 取消</button>
+        <button onclick="refreshModels(true)">刷新模型列表</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>实时日志</h2>
+      <div class="bd" style="padding:10px">
+        <div class="logs" id="logs"><div class="empty">等待任务开始…</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>产物</h2>
+      <div class="bd"><div class="out" id="outs"><div class="empty">暂无产物</div></div></div>
+    </div>
+  </div>
+</main>
+
+<!-- 目录 / 文件选择器 -->
+<div class="mask" id="mask" onclick="if(event.target===this)closePicker()">
+  <div class="modal">
+    <header>
+      <h3 id="pickTitle">选择目录</h3>
+      <button class="sm" onclick="browse(parentPath)">↑ 上级</button>
+      <button class="sm pri" id="pickOk" onclick="pickCurrent()">选择此目录</button>
+      <button class="sm" onclick="closePicker()">✕</button>
+    </header>
+    <div style="padding:10px 12px 0">
+      <div class="crumb" id="crumb"></div>
+    </div>
+    <div class="tree" id="tree"></div>
+    <div class="btn-row">
+      <span class="hint" id="pickHint" style="margin-right:auto"></span>
+      <button onclick="closePicker()">取消</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let curPath = '', parentPath = null, jobId = '', logN = 0, timer = null;
+/* pickMode='dir' 选目录；'file' 选文件。pickKind 决定列哪些扩展名。 */
+let pickTarget = 'media', pickKind = 'media', pickMode = 'dir';
+
+async function api(u, opt){
+  const r = await fetch(u, opt);
+  if(!r.ok){ let m=r.statusText; try{ m=(await r.json()).detail||m }catch(e){}; throw new Error(m); }
+  return r.json();
+}
+const esc = s => (s||'').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+/* ASS 的 &H00BBGGRR → #RRGGBB，用于把配置里的高亮色回填到颜色选择器 */
+function assToHex(a){
+  a = (a || '').trim();
+  const m = /^&H(?:[0-9A-Fa-f]{2})?([0-9A-Fa-f]{6})$/.exec(a);
+  if(!m) return /^#[0-9A-Fa-f]{6}$/.test(a) ? a.toUpperCase() : '';
+  const v = m[1].toUpperCase();
+  return '#' + v.slice(4, 6) + v.slice(2, 4) + v.slice(0, 2);
+}
+
+/* ---------- 初始化 ---------- */
+async function init(){
+  try{
+    const d = await api('/api/defaults');
+    if(!$('media').value) $('media').value = '';
+    $('workdir').value = d.workdir;
+    showOutHint();
+    $('asrModel').value = d.asr_model;
+    $('language').value = d.language;
+    $('temperature').value = d.temperature;
+    $('concurrency').value = d.concurrency;
+    $('ttsProvider').value = d.tts_provider;
+    /* 视频合成默认值 */
+    $('vSize').innerHTML = (d.video_presets||['竖屏 1080x1920'])
+      .map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    $('vSize').value = d.video_size || '竖屏 1080x1920';
+    $('vBg').value = d.video_bg_path || '';
+    $('vColor').value = d.video_bg_color || '#1e293b';
+    $('vFit').value = d.video_fit || 'cover';
+    $('vSub').checked = d.video_subtitle !== false;
+    $('vStyle').innerHTML = (d.video_styles || [{id:'classic',name:'经典'}])
+      .map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    $('vStyle').value = d.video_style || 'classic';
+    $('vHl').innerHTML = (d.video_highlights || [{id:'none',name:'不高亮'}])
+      .map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    $('vHl').value = d.video_highlight_mode || 'none';
+    $('vHlHex').value = assToHex(d.video_highlight_color) || '#00F090';
+    $('vHlColor').value = $('vHlHex').value;
+    $('vKw').value = (d.video_keywords || []).join(',');
+    $('vBigCPL').value = d.video_big_chars_per_line || 4;
+    $('vBigLPS').value = d.video_big_lines_per_screen || 3;
+    $('vBigSize').value = 0;
+    $('vBigBold').value = '1';
+    $('vTypewriter').checked = !!d.video_typewriter;
+    $('vTySpeed').value = d.video_type_speed || 0.08;
+    $('vTyHold').value = (d.video_type_hold != null ? d.video_type_hold : 0.3);
+    $('vTyMode').value = (d.video_type_speed > 0) ? 'fixed' : 'auto';
+    $('vFontSize').value = d.video_font_size || 76;
+    $('vCPL').value = d.video_chars_per_line || 16;
+    $('vMargin').value = d.video_margin_v || 300;
+    $('vBold').value = '0';
+    $('vTail').value = d.video_tail_pad != null ? d.video_tail_pad : 0.6;
+    $('vFade').value = d.video_fade_in || 0;
+    $('vCrf').value = d.video_crf || 23;
+    $('vConc').value = d.video_concurrency || 1;
+    $('vHlColor').addEventListener('input', ()=>syncHlColor('picker'));
+    $('vHlHex').addEventListener('input', ()=>syncHlColor('hex'));
+    toggleVideo();
+    /* 原始文案来源 */
+    $('srcKind').innerHTML = (d.source_kinds || [{id:'media',name:'音视频目录'}])
+      .map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+    $('srcOcrProv').innerHTML = (d.ocr_engines || [{id:'auto',name:'自动选择'}])
+      .map(s=>`<option value="${esc(s.id)}">${esc(s.name)}${s.ok?'':'（不可用）'}</option>`).join('');
+    $('srcOcrProv').value = d.ocr_provider || 'auto';
+    $('srcOcrModel').value = d.ocr_model || '';
+    window.OCR_ENGINES = d.ocr_engines || [];
+    onOcrChange();
+    onSrcKindChange();
+    bindFieldHooks();
+  }catch(e){ toast('读取默认配置失败：'+e.message); }
+  await Promise.all([refreshModels(), loadPrompts(), loadVoices()]);
+}
+
+/* 所有「路径/内容变了要联动」的钩子集中在这里。
+   目录选择器是用 JS 赋值的，不会自然触发 change，由 applyPick() 手动派发。 */
+function bindFieldHooks(){
+  const on = (id, ev, fn) => {
+    const el = $(id);
+    // 防止重复绑定（initDefaults 可能被多次调用）
+    if(el && !el.dataset.hooked){ el.addEventListener(ev, fn); el.dataset.hooked = '1'; }
+  };
+  on('media',   'change', ()=>{ checkMedia(); showOutHint(); });
+  on('workdir', 'change', ()=>showOutHint());
+  on('vBg',     'change', ()=>onBgPicked($('vBg').value.trim()));
+  on('srcImg',  'change', ()=>loadOcrEngines());
+  on('srcTbl',  'change', ()=>loadTableColumns($('srcTbl').value.trim()));
+  on('srcTextBody', 'input', updateTextCount);
+  // 打开页面时先把已有值的联动跑一遍
+  if($('media').value.trim()) checkMedia();
+  if($('srcTbl').value.trim()) loadTableColumns($('srcTbl').value.trim());
+  updateTextCount();
+}
+
+/* ---------- 原始文案来源 ---------- */
+function onSrcKindChange(){
+  const k = $('srcKind').value;
+  $('srcMedia').style.display = (k==='media') ? 'block' : 'none';
+  $('srcText').style.display  = (k==='text')  ? 'block' : 'none';
+  $('srcImage').style.display = (k==='image') ? 'block' : 'none';
+  $('srcTable').style.display = (k==='table') ? 'block' : 'none';
+  $('srcHint').textContent = {
+    media: '用 Whisper 把视频里的口播转成文字（本地跑，不用联网）',
+    text:  '不经过转写，直接把这段话送去仿写',
+    image: '先用 OCR 把图片里的字识别出来，再送去仿写',
+    table: '读 Excel/CSV 里已有一列文案，一行一条',
+  }[k] || '';
+}
+
+function updateTextCount(){
+  const n = ($('srcTextBody').value || '').trim().length;
+  $('srcTextCount').textContent = n + ' 字';
+}
+
+function onOcrChange(){
+  const id = $('srcOcrProv').value;
+  const e = (window.OCR_ENGINES||[]).find(x=>x.id===id);
+  const needModel = (id==='ollama' || id==='openai');
+  $('srcOcrModel').parentElement.style.display = needModel ? 'block' : 'none';
+  if(e) $('srcOcrHint').textContent = e.ok ? ('引擎：'+e.detail) : ('不可用：'+e.detail);
+}
+
+async function loadOcrEngines(){
+  try{
+    const d = await api('/api/ocr');
+    window.OCR_ENGINES = d.engines || [];
+    const keep = $('srcOcrProv').value;
+    $('srcOcrProv').innerHTML = d.engines.map(s=>
+      `<option value="${esc(s.id)}">${esc(s.name)}${s.ok?'':'（不可用）'}</option>`).join('');
+    if(keep) $('srcOcrProv').value = keep;
+    onOcrChange();
+  }catch(e){ /* 保持默认即可 */ }
+}
+
+async function loadTableColumns(p){
+  if(!p) return;
+  $('srcTblHint').textContent = '正在读取列名…';
+  try{
+    const d = await api('/api/table/columns', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({path:p})});
+    const opts = ['<option value="">（请选择）</option>']
+      .concat((d.columns||[]).map(c=>`<option value="${esc(c)}">${esc(c)}</option>`)).join('');
+    $('srcTblCol').innerHTML = opts;
+    $('srcTblName').innerHTML = '<option value="">（用行号命名）</option>' + opts;
+    if(d.guess) $('srcTblCol').value = d.guess;
+    const sheets = (d.sheets||[]).length > 1 ? `（多工作表时取第 1 张：${esc(d.sheets[0])}）` : '';
+    $('srcTblHint').textContent =
+      `共 ${d.rows} 行、${(d.columns||[]).length} 列，已自动选中「${d.guess||'—'}」` + sheets;
+  }catch(e){
+    $('srcTblHint').textContent = '读取失败：' + (e.message||e);
+  }
+}
+
+async function refreshModels(force){
+  $('provHint').textContent = '正在探测后端…';
+  try{
+    const d = await api('/api/models'+(force?'?refresh=1':''));
+    window.MODELS = d;
+    const sel = $('provider'), keep = sel.value;
+    sel.innerHTML = d.providers.map(p=>
+      `<option value="${p.provider}">${p.provider}　${p.ok?'✓ 可用':'✗ 不可用'}</option>`).join('');
+    if(keep) sel.value = keep;
+    onProviderChange();
+    $('provHint').textContent = d.providers.filter(p=>p.ok).length + ' 个后端可用'
+      + (d.cached ? '（缓存）' : '（已刷新）');
+  }catch(e){ $('provHint').textContent = '探测失败：'+e.message; }
+}
+
+function onProviderChange(){
+  const name = $('provider').value;
+  const p = (window.MODELS?.providers||[]).find(x=>x.provider===name);
+  const sel = $('model');
+  const def = window.MODELS?.default_model || '';
+  let list = p?.models || [];
+  sel.innerHTML = list.length ? list.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')
+                              : `<option value="${esc(def)}">${esc(def||'（无可用模型）')}</option>`;
+  if(def && [...sel.options].some(o=>o.value===def)) sel.value = def;
+  if(!list.length) sel.innerHTML += `<option value="">— 可手动输入 —</option>`;
+  const hint = p ? (p.ok ? p.detail||'' : '⚠ '+ (p.detail||'不可用')) : '';
+  $('provHint').textContent = hint;
+}
+
+async function loadPrompts(){
+  try{
+    const d = await api('/api/prompts');
+    $('prompt').innerHTML = d.prompts.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    $('promptHint').textContent = `共 ${d.prompts.length} 套模板，可在 src/wxcopy/prompts/rewrite/ 下新增 .md 自定义`;
+  }catch(e){ $('promptHint').textContent = '加载失败：'+e.message; }
+}
+
+async function loadVoices(){
+  try{
+    const d = await api('/api/voices');
+    $('voice').innerHTML = d.voices.map(v=>
+      `<option value="${esc(v.id)}">${esc(v.id)}${v.gender?'（'+v.gender+'）':''}</option>`).join('');
+    if(d.error) $('warn').innerHTML = `<div class="warnbox">${esc(d.error)}</div>`;
+  }catch(e){}
+}
+
+/* ---------- 目录 / 文件选择 ---------- */
+/* 不同用途下弹窗的标题与文件图标 */
+const PICK_LABEL = {media:'音视频', image:'图片', table:'表格', bg:'背景',
+                    video:'视频', audio:'音频', any:'文件'};
+const FILE_ICON  = {image:'🖼', table:'📊', bg:'🖼', video:'🎬', audio:'🎵'};
+
+async function openPicker(target, mode, kind){
+  pickTarget = target;
+  pickMode = mode || 'dir';
+  pickKind = kind || (pickMode === 'file' ? 'bg' : 'media');
+  $('mask').classList.add('on');
+  $('pickTitle').textContent = pickMode === 'file'
+    ? '选择' + (PICK_LABEL[pickKind] || '文件')
+    : '选择' + (PICK_LABEL[pickKind] || '') + '目录';
+  $('pickOk').textContent = pickMode === 'file' ? '不选文件（清空）' : '选择此目录';
+  try{
+    const d = await api('/api/roots');
+    renderTree(d.roots.map(r=>({name:r.name, path:r.path})), null, []);
+    curPath = ''; parentPath = null;
+    $('crumb').textContent = '请选择起始位置（点击盘符进入）';
+    $('pickHint').textContent = '';
+  }catch(e){ $('pickHint').textContent = '加载失败：'+e.message; }
+}
+function closePicker(){ $('mask').classList.remove('on'); }
+
+/* 用 DOM 属性传路径：绝不能把 Windows 路径拼进 onclick 字符串，
+   `D:\data\test` 里的 \t 会被 JS 当成制表符，路径直接被打断。 */
+function renderTree(items, up, files){
+  const box = $('tree');
+  box.innerHTML = '';
+  if(up){
+    const d = document.createElement('div');
+    d.className = 'i up'; d.textContent = '↑ 返回上级';
+    d.onclick = () => browse(up);
+    box.appendChild(d);
+  }
+  const fileMode = pickMode === 'file';
+  if(!items.length && !(files||[]).length){
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = fileMode ? '该目录没有子文件夹，也没有可用文件' : '该目录没有子文件夹';
+    box.appendChild(e); return;
+  }
+  for(const it of items){
+    const d = document.createElement('div');
+    d.className = 'i';
+    const ic = document.createElement('span'); ic.textContent = '📁 ';
+    const nm = document.createElement('span'); nm.textContent = it.name;
+    d.append(ic, nm);
+    d.onclick = () => browse(it.path);
+    box.appendChild(d);
+  }
+  /* 文件只在「选文件」模式下露出，点了直接采用 */
+  for(const f of (files||[])){
+    const d = document.createElement('div');
+    d.className = 'i';
+    const ic = document.createElement('span');
+    ic.textContent = (FILE_ICON[pickKind] || '📄') + ' ';
+    const nm = document.createElement('span'); nm.textContent = f.name;
+    const sz = document.createElement('span');
+    sz.className = 'cnt';
+    sz.textContent = f.size >= 1024*1024
+      ? (f.size/1024/1024).toFixed(1)+' MB'
+      : Math.max(1, Math.round(f.size/1024))+' KB';
+    d.append(ic, nm, sz);
+    d.onclick = () => { applyPick(pickTarget, f.path); closePicker(); };
+    box.appendChild(d);
+  }
+}
+
+/* 选中后的统一入口：直接给 input 赋值不会触发 change 事件，
+   而「选完表格要读列名」这类后续动作都挂在 change 上，所以手动派发一次。 */
+function applyPick(target, path){
+  const el = $(target);
+  if(!el) return;
+  el.value = path || '';
+  el.dispatchEvent(new Event('change'));
+}
+
+async function browse(p){
+  if(!p) return;
+  $('pickHint').textContent = '读取中…';
+  try{
+    const d = await api(`/api/browse?path=${encodeURIComponent(p)}&kind=${pickKind}`);
+    curPath = d.path; parentPath = d.parent;
+    $('crumb').textContent = d.path;
+    renderTree(d.dirs, d.parent, d.files);
+    const n = d.media_count || 0;
+    const what = PICK_LABEL[pickKind] || '可用';
+    $('pickHint').textContent = d.error ? '⚠ '+d.error
+      : (n ? `当前目录有 ${n} 个${what}文件` + (pickMode==='file' ? '（点文件即选中）' : '')
+           : `该目录下没有${what}文件`);
+  }catch(e){
+    $('pickHint').textContent = '⚠ '+e.message;
+  }
+}
+
+function pickCurrent(){
+  if(pickMode === 'file'){
+    /* 选文件时点这个 = 明确不要文件，清空「当前目标」（不能写死成 vBg） */
+    applyPick(pickTarget, '');
+    closePicker(); return;
+  }
+  if(!curPath){ $('pickHint').textContent = '请先进入一个目录'; return; }
+  applyPick(pickTarget, curPath);
+  closePicker();
+}
+
+function onBgPicked(p){
+  const box = $('vBgHint');
+  if(!p){ box.innerHTML = `将使用纯色背景 <code>${esc($('vColor').value||'#1e293b')}</code>`; return; }
+  const isVideo = /\.(mp4|mov|mkv|avi|flv|webm|m4v)$/i.test(p);
+  box.innerHTML = isVideo
+    ? '✅ 视频背景：会被循环播放到语音结束'
+    : '✅ 图片背景：会被裁剪/留边适配画面尺寸';
+}
+
+async function checkMedia(){
+  const p = $('media').value.trim();
+  if(!p){ $('mediaHint').textContent = '支持包含 mp4/mov/mkv/mp3 等音视频的文件夹'; return; }
+  try{
+    const d = await api('/api/browse?path='+encodeURIComponent(p)+'&kind=media');
+    $('mediaHint').innerHTML = d.error ? `⚠ ${esc(d.error)}`
+      : d.media_count ? `✅ 识别到 <b>${d.media_count}</b> 个音视频文件`
+      : '⚠ 该目录下没有音视频文件';
+  }catch(e){ $('mediaHint').textContent = '⚠ '+e.message; }
+}
+
+/* ---------- 任务 ---------- */
+function toggleVideo(){
+  $('vBox').style.display = $('vEnabled').checked ? 'block' : 'none';
+  if($('vEnabled').checked){ onBgPicked($('vBg').value.trim()); onStyleChange(); }
+}
+
+/* 切 classic / big 两组参数，并同步提示 */
+function onStyleChange(){
+  const isBig = $('vStyle').value === 'big';
+  const sub = $('vSub').checked;
+  $('vClassicBox').style.display = (isBig || !sub) ? 'none' : 'block';
+  $('vBigBox').style.display     = (isBig && sub) ? 'block' : 'none';
+  $('vStyleHint').innerHTML = isBig
+    ? '复刻爆款口播号：中上部超大粗体短句，每行 2~4 字，隔行或关键词染霓虹绿'
+    : '常规字幕：底部居中，一行十几个字，白色细描边';
+  onHlChange();
+  onTyChange();
+}
+
+function onHlChange(){
+  const m = $('vHl').value;
+  $('vKwRow').style.display = (m === 'keywords') ? 'block' : 'none';
+}
+
+/* 打字机开关：只有 big 样式才有意义 */
+function onTyChange(){
+  const isBig = $('vStyle').value === 'big';
+  const on = $('vTypewriter').checked && isBig;
+  $('vTypewriter').disabled = !isBig;
+  $('vTyBox').style.display = on ? 'grid' : 'none';
+  const fixed = $('vTyMode').value === 'fixed';
+  $('vTyFixedBox').style.display = fixed ? 'block' : 'none';
+  $('vTyAutoBox').style.display  = fixed ? 'none' : 'block';
+}
+
+/* 颜色框与文本框双向同步 */
+function syncHlColor(from){
+  const c = from === 'picker' ? $('vHlColor').value : $('vHlHex').value.trim();
+  if(from === 'picker') $('vHlHex').value = c;
+  else if(/^#[0-9a-fA-F]{6}$/.test(c)) $('vHlColor').value = c;
+}
+
+function collectSource(){
+  const k = $('srcKind').value;
+  const s = {kind: k};
+  if(k === 'media'){
+    s.media = $('media').value.trim();
+  }else if(k === 'text'){
+    s.text = $('srcTextBody').value;
+    s.name = $('srcTextName').value.trim();
+  }else if(k === 'image'){
+    const p = $('srcImg').value.trim();
+    s.images = p ? [p] : [];
+    s.ocr_provider = $('srcOcrProv').value;
+    s.ocr_model = $('srcOcrModel').value.trim();
+  }else if(k === 'table'){
+    s.table = $('srcTbl').value.trim();
+    s.table_column = $('srcTblCol').value;
+    s.name_column = $('srcTblName').value;
+  }
+  return s;
+}
+
+// 前端预检：按来源类型分别校验，文案与后端 /api/run 保持一致
+function checkSource(src){
+  const s = src || {};
+  const k = (s.kind || 'media').toLowerCase();
+  if(k === 'media'){
+    if(!(s.media || '').trim()) return '请先选择音视频目录';
+  }else if(k === 'text'){
+    if(!(s.text || '').trim()) return '请先输入文案内容';
+  }else if(k === 'image'){
+    if(!(s.images || []).length) return '请先选择图片文件或目录';
+  }else if(k === 'table'){
+    if(!(s.table || '').trim()) return '请先选择表格文件';
+    if(!(s.table_column || '').trim()) return '请选择文案所在的列';
+  }else{
+    return '未知的文案来源：' + k;
+  }
+  return '';
+}
+
+function collect(){
+  return {
+    media: $('media').value.trim(),
+    source: collectSource(),
+    workdir: $('workdir').value.trim() || './output',
+    provider: $('provider').value,
+    model: $('model').value,
+    prompt: $('prompt').value,
+    temperature: parseFloat($('temperature').value || '0.85'),
+    concurrency: parseInt($('concurrency').value || '1'),
+    tts_provider: $('ttsProvider').value,
+    voice: $('voice').value,
+    asr_model: $('asrModel').value,
+    language: $('language').value.trim() || 'zh',
+    limit: $('limit').value ? parseInt($('limit').value) : null,
+    recursive: $('recursive').checked,
+    video: Object.assign({
+      enabled: $('vEnabled').checked,
+      bg_path: $('vBg').value.trim(),
+      bg_color: $('vColor').value.trim() || '#1e293b',
+      fit: $('vFit').value,
+      size: $('vSize').value,
+      subtitle: $('vSub').checked,
+      style: $('vStyle').value,
+      tail_pad: parseFloat($('vTail').value || '0.6'),
+      fade_in: parseFloat($('vFade').value || '0'),
+      crf: parseInt($('vCrf').value || '23'),
+      concurrency: parseInt($('vConc').value || '1'),
+    }, $('vStyle').value === 'big' ? {
+      highlight_mode: $('vHl').value,
+      highlight_color: $('vHlHex').value.trim() || '#00F090',
+      keywords: $('vKw').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean),
+      big_chars_per_line: parseInt($('vBigCPL').value || '4'),
+      big_lines_per_screen: parseInt($('vBigLPS').value || '3'),
+      big_font_size: parseInt($('vBigSize').value || '0'),
+      font: '',                       // 空 = big 自动挑粗黑体
+      bold: $('vBigBold').value === '1',
+      typewriter: $('vTypewriter').checked,
+      type_speed: $('vTyMode').value === 'fixed'
+        ? parseFloat($('vTySpeed').value || '0.08') : 0,
+      type_hold: parseFloat($('vTyHold').value || '0.3'),
+    } : {
+      font_size: parseInt($('vFontSize').value || '76'),
+      chars_per_line: parseInt($('vCPL').value || '16'),
+      margin_v: parseInt($('vMargin').value || '300'),
+      bold: $('vBold').value === '1',
+    }),
+  };
+}
+
+async function startJob(){
+  const payload = collect();
+  const err = checkSource(payload.source);
+  if(err){ toast(err); return; }
+  $('btnRun').disabled = true; $('btnCancel').disabled = false;
+  $('logs').innerHTML = ''; logN = 0; jobId = '';
+  try{
+    const d = await api('/api/run', {method:'POST', headers:{'Content-Type':'application/json'},
+                                     body: JSON.stringify(payload)});
+    jobId = d.job_id;
+    $('pill').textContent = '● 运行中'; $('pill').style.color = 'var(--pri)';
+    timer = setInterval(poll, 1000); poll();
+  }catch(e){
+    toast('启动失败：'+e.message);
+    $('btnRun').disabled = false; $('btnCancel').disabled = true;
+  }
+}
+
+async function poll(){
+  if(!jobId) return;
+  try{
+    const d = await api(`/api/job/${jobId}?since=${logN}`);
+    if(d.logs.length){
+      const box = $('logs');
+      if(logN===0) box.innerHTML = '';
+      box.insertAdjacentHTML('beforeend', d.logs.map(l=>
+        `<div class="l-${l.level}"><span class="t">${l.t}</span>${esc(l.msg)}</div>`).join(''));
+      box.scrollTop = box.scrollHeight;
+      logN = d.total_logs;
+    }
+    $('bar').style.width = d.percent + '%';
+    $('cnt').textContent = `${d.current} / ${d.total}`;
+    $('stageText').textContent = d.stage || (d.status==='running' ? '准备中' : '未开始');
+    if(d.status==='error') $('stageBox').innerHTML = `<span>失败</span> ${esc(d.error||'')}`;
+    if(d.status==='done'){
+      stopPoll('✅ 全部完成');
+      renderOuts(d.outputs);
+    } else if(d.status==='cancelled'){ stopPoll('■ 已取消'); }
+  }catch(e){ stopPoll('轮询失败：'+e.message); }
+}
+
+function stopPoll(msg){
+  clearInterval(timer); timer = null;
+  $('btnRun').disabled = false; $('btnCancel').disabled = true;
+  $('pill').textContent = '● ' + msg; $('pill').style.color = 'var(--ok)';
+}
+
+async function cancelJob(){
+  if(!jobId) return;
+  await api(`/api/job/${jobId}/cancel`, {method:'POST'});
+  $('btnCancel').disabled = true;
+}
+
+function renderOuts(o){
+  const box = $('outs');
+  if(!o || !Object.keys(o).length){ box.innerHTML = '<div class="empty">暂无产物</div>'; return; }
+  let h = '';
+  if(o.table){
+    h += `<div class="o">
+      <span class="tag ok">文案表格</span>
+      <span class="p" title="${esc(o.table)}">${esc(o.table)}</span>
+      ${o.table_size?`<span class="hint">${Math.round(o.table_size/1024)} KB</span>`:''}
+      <button class="sm" onclick="openPath('${b64(o.table)}')">打开</button>
+      <button class="sm" onclick="dl('${b64(o.table)}')">下载</button></div>`;
+  }
+  if(o.voice_dir){
+    h += `<div class="o">
+      <span class="tag">配音目录</span>
+      <span class="p" title="${esc(o.voice_dir)}">${esc(o.voice_dir)}</span>
+      ${o.voice_count!=null?`<span class="tag ok">${o.voice_count} 个音频</span>`:''}
+      <button class="sm" onclick="openPath('${b64(o.voice_dir)}')">打开</button></div>`;
+    (o.voice_files||[]).slice(0,12).forEach(f=>{
+      h += `<div class="o" style="margin-left:14px;background:#fff">
+        <span class="tag">🎵</span>
+        <span class="p" title="${esc(f)}">${esc(f.split(/[\\\\/]/).pop())}</span>
+        <button class="sm" onclick="openPath('${b64(f)}')">打开</button></div>`;
+    });
+    if((o.voice_count||0) > 12) h += `<div class="hint">…还有 ${o.voice_count-12} 个，点上方「打开」查看全部</div>`;
+  }
+  if(o.video_dir){
+    h += `<div class="o">
+      <span class="tag" style="background:#fef3c7;color:#92400e">视频目录</span>
+      <span class="p" title="${esc(o.video_dir)}">${esc(o.video_dir)}</span>
+      ${o.video_count!=null?`<span class="tag ok">${o.video_count} 个视频</span>`:''}
+      <button class="sm" onclick="openPath('${b64(o.video_dir)}')">打开</button></div>`;
+    (o.video_files||[]).slice(0,12).forEach(f=>{
+      h += `<div class="o" style="margin-left:14px;background:#fff">
+        <span class="tag">🎬</span>
+        <span class="p" title="${esc(f)}">${esc(f.split(/[\\\\/]/).pop())}</span>
+        <button class="sm" onclick="openPath('${b64(f)}')">打开</button>
+        <button class="sm" onclick="dl('${b64(f)}')">下载</button></div>`;
+    });
+    if((o.video_count||0) > 12) h += `<div class="hint">…还有 ${o.video_count-12} 个，点上方「打开」查看全部</div>`;
+  }
+  box.innerHTML = h || '<div class="empty">暂无产物</div>';
+}
+/* 路径经 base64 传递，避免反斜杠/引号在 onclick 字符串里被转义破坏 */
+function b64(p){ return btoa(unescape(encodeURIComponent(p))); }
+async function openPath(b){
+  const p = decodeURIComponent(escape(atob(b)));
+  try{ await api('/api/open',{method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({path:p})}); }
+  catch(e){ toast('打开失败：'+e.message); }
+}
+function dl(b){ location.href = '/api/download?path='+encodeURIComponent(decodeURIComponent(escape(atob(b)))); }
+
+function showOutHint(){
+  const p = $('workdir').value.trim();
+  if(!p){ $('outHint').innerHTML = ''; return; }
+  const v = $('vEnabled').checked ? `，视频在 <code>${esc(p)}\\video</code>` : '';
+  $('outHint').innerHTML =
+    `音频会写到 <code>${esc(p)}\\voice</code>，表格在 <code>${esc(p)}\\transcripts.xlsx</code>${v}`;
+}
+
+function toast(m){ alert(m); }
+
+$('media').addEventListener('change', checkMedia);
+$('workdir').addEventListener('input', showOutHint);
+$('vColor').addEventListener('input', ()=>{ if(!$('vBg').value.trim()) onBgPicked(''); });
+init();
+</script>
+</body>
+</html>

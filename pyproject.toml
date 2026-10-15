@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wxcopy"
+version = "0.2.0"
+description = "视频号对标素材处理流水线：语音转文字 / 多模型文案仿写 / 文案转配音 / 口播视频合成"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "xuaijun" }]
+dependencies = [
+    "openai>=1.40",
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+    "PyYAML>=6.0",
+    "typer>=0.12",
+    "rich>=13.7",
+    "edge-tts>=6.1",
+    "faster-whisper>=1.0",
+    "imageio-ffmpeg>=0.4.9",
+]
+
+[project.optional-dependencies]
+asr-local = ["faster-whisper>=1.0"]
+tts-offline = ["pyttsx3>=2.90"]
+# 大字字幕按词断行用；没装会自动退回按字数切，不会报错
+subtitle = ["jieba>=0.42"]
+# 图片 OCR（本地离线中文）；没装时 wxcopy ocr --engines 会提示怎么装
+ocr = ["rapidocr-onnxruntime>=1.3"]
+web = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+all = ["jieba>=0.42", "pyttsx3>=2.90", "rapidocr-onnxruntime>=1.3",
+       "fastapi>=0.115", "uvicorn[standard]>=0.30"]
+
+[project.scripts]
+wxcopy = "wxcopy.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+wxcopy = ["prompts/**/*.md", "web/static/**/*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# 测试里允许 assert、魔数、以及 import 写在非顶部（某些用例需要）
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+# 让 wxcopy 的中文日志/表格名在断言失败时能正常显示
+filterwarnings = ["ignore::DeprecationWarning"]
+

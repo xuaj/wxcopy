@@ -1,0 +1,182 @@
+# wxcopy 配置示例
+# 使用：wxcopy --config config/config.example.yaml ...
+# 字符串里的 ${VAR} 会被同名环境变量替换。
+
+paths:
+  workdir: ./output        # 中间产物与最终结果的根目录
+  audio_dir: ""            # 空则用 {workdir}/audio
+  text_dir: ""             # 空则用 {workdir}/text
+  voice_dir: ""            # 空则用 {workdir}/voice
+  video_dir: ""            # 空则用 {workdir}/video
+
+# ---------- 1. 语音转文字 ----------
+asr:
+  provider: faster-whisper     # faster-whisper(本地) | openai(云端兼容端点)
+  model: small                 # tiny/base/small/medium/large-v3；中文建议 small 起步
+  language: zh                 # 空字符串表示自动检测
+  device: auto                 # auto | cpu | cuda
+  compute_type: default        # default | int8 | float16
+  vad_filter: true
+  beam_size: 5
+  # 云端转写用的 OpenAI 兼容端点（provider=openai 时生效）
+  openai:
+    base_url: https://api.siliconflow.cn/v1
+    api_key_env: SILICONFLOW_API_KEY
+    model: FunAudioLLM/SenseVoiceSmall
+
+# ---------- 2. 仿写 ----------
+llm:
+  provider: ollama             # 命令行可用 --provider 覆盖
+  model: qwen2.5:7b            # 命令行可用 --model 覆盖；本机已装，跑前先 ollama pull
+  temperature: 0.85
+  max_tokens: 2048
+  top_p: 0.9
+  timeout: 600
+  max_retries: 3
+
+# 可选模型端点预设。type=ollama 走本地；type=openai 走 OpenAI 兼容的云厂商。
+providers:
+  ollama:
+    type: ollama
+    base_url: http://127.0.0.1:11434
+    model: qwen2.5:7b
+    keep_alive: 10m
+
+  deepseek:
+    type: openai
+    base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY
+    model: deepseek-chat
+
+  dashscope:                   # 阿里通义千问
+    type: openai
+    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    api_key_env: DASHSCOPE_API_KEY
+    model: qwen-plus
+
+  zhipu:                       # 智谱 GLM
+    type: openai
+    base_url: https://open.bigmodel.cn/api/paas/v4
+    api_key_env: ZHIPU_API_KEY
+    model: glm-4-flash
+
+  moonshot:                    # Kimi
+    type: openai
+    base_url: https://api.moonshot.cn/v1
+    api_key_env: MOONSHOT_API_KEY
+    model: moonshot-v1-8k
+
+  siliconflow:                 # 硅基流动（聚合多家开源模型）
+    type: openai
+    base_url: https://api.siliconflow.cn/v1
+    api_key_env: SILICONFLOW_API_KEY
+    model: Qwen/Qwen2.5-7B-Instruct
+
+  doubao:                      # 火山方舟豆包
+    type: openai
+    base_url: https://ark.cn-beijing.volces.com/api/v3
+    api_key_env: DOUBAO_API_KEY
+    model: doubao-pro-32k
+
+  openai:
+    type: openai
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    model: gpt-4o-mini
+
+rewrite:
+  prompt: default              # 内置模板名，或 prompt_file 指定的 md 文件
+  prompt_file: ""
+  concurrency: 1               # 本地小模型建议 1；云端可开 4~8
+  max_chars: 6000              # 单条文案喂给模型的最大字符数
+  keep_hashtags: false         # 是否在输出里保留 #标签
+  min_chars: 20                # 小于该长度的原文跳过
+
+# ---------- 3. 文案转音频 ----------
+tts:
+  provider: edge               # edge(免费) | openai(兼容 /v1/audio/speech) | pyttsx3(离线)
+  voice: zh-CN-XiaoxiaoNeural  # edge 音色
+  rate: +0%                    # 语速，如 +10%
+  volume: +0%                  # 音量
+  pitch: +0Hz
+  format: mp3
+  openai:
+    base_url: https://api.siliconflow.cn/v1
+    api_key_env: SILICONFLOW_API_KEY
+    model: FunAudioLLM/CosyVoice2-0.5B
+    voice: FunAudioLLM/CosyVoice2-0.5B:alex
+
+# ---------- 图片转文字（「图片」这种原始文案来源用）----------
+# auto 会按 rapidocr -> tesseract -> ollama -> openai 的顺序挑第一个真能用的，
+# 本地优先：不花钱、图片也不外传。
+ocr:
+  provider: auto            # auto | rapidocr | tesseract | ollama | openai
+  model: ""                 # 视觉模型名，openai/ollama 必填，例如 qwen2.5vl:7b
+  base_url: ""              # 留空时 ollama 用 http://127.0.0.1:11434
+  api_key_env: ""           # openai 后端从该环境变量取 Key
+  api_key: ""               # 也可直接写死（不推荐入库）
+  prompt: ""                # 留空用内置提示词（只输出文字本身）
+  max_side: 1600            # 送视觉模型前把长边缩到多少，省 token
+  min_score: 0.5            # rapidocr 置信度过滤，越低字越多但错字也多
+  languages: "chi_sim+eng"  # 仅 tesseract
+  concurrency: 1
+
+# ---------- 4. 仿写文案 -> 口播视频 ----------
+# 用「仿写文案 + 配音」合成短视频：背景（图片/视频/纯色）+ 自动分行字幕。
+video:
+  bg_path: ""                  # 背景图片或视频的绝对路径；留空用 bg_color 纯色
+  bg_color: "#1e293b"          # 纯色背景
+  fit: cover                   # cover(裁满，推荐) | contain(居中留边)
+  size: 竖屏 1080x1920          # 竖屏 1080x1920 | 竖屏 720x1280 | 横屏 1920x1080 | 方形 1080x1080
+  width: 0                     # >0 时覆盖 size 的宽
+  height: 0                    # >0 时覆盖 size 的高
+  fps: 30
+
+  # ---------- 字幕 ----------
+  # classic：底部居中整句小字（信息型口播）
+  # big    ：中上部超大粗体短句 + 关键词染霓虹绿（复刻主流爆款口播号）
+  style: classic
+  subtitle: true               # 是否烧录字幕
+  font: Microsoft YaHei        # classic 字体；big 样式会自动改用 SimHei 等粗黑体
+  bold: false
+  font_size: 76                # classic 字号
+  font_color: "&H00FFFFFF"     # ASS 颜色：&H00BBGGRR（白）
+  outline_color: "&H00000000"  # 描边（黑）
+  outline: 3.0
+  shadow: 1.0
+  margin_v: 300                # classic 字幕距底部像素
+  chars_per_line: 16           # classic 每行最多几个字
+  align: 2                     # 2=底部居中 5=垂直居中
+  subtitle_fade: 0.08          # 每条字幕淡入淡出秒数，0=硬切
+
+  # ---------- big 样式专用 ----------
+  big_font: ""                 # 空 = 自动挑粗黑体（SimHei）；也可写思源/普惠体等已装字体
+  big_font_size: 0             # 0 = 按画面宽度自适应（width × 0.147，1080 → 159）
+  big_chars_per_line: 4        # 每行最多几个字（爆款视频通常是 2~4 字）
+  big_lines_per_screen: 3      # 每屏最多几行，同屏的行一起出现
+  big_top_ratio: 0.16          # 首行顶部距画面顶部的比例
+  big_line_spacing: 1.5        # 行距 = 字号 × 该系数
+  # 高亮：none 不高亮 | alternate 隔行高亮（首行绿，实测最像参考视频）
+  #       auto 自动（数字/百分比/营销词）| keywords 只高亮下面列的词
+  highlight_mode: none
+  highlight_color: "#00F090"   # 写 #RRGGBB 或 ASS 的 &H00BBGGRR 都可以
+  highlight_outline_color: "&H00FFFFFF"   # 高亮字的描边色（白描边更有霓虹感）
+  keywords: []                 # highlight_mode=keywords 时生效，例如 ["免费","省钱","风口"]
+
+  # ---------- 打字机效果（逐字打出，仅 big 样式生效）----------
+  typewriter: false            # true = 大字一个一个打出来（不重叠，累计前缀）
+  type_speed: 0.0              # 每字固定秒数，如 0.08；0 = 按本屏语音时长自适应
+  type_hold: 0.3               # 自适应：打完整行后停留时间占本屏时长的比例（0~0.9）
+  type_min: 0.045              # 自适应：每字时长下限（秒），防止字太多时挤成一团
+
+  # ---------- 编码 ----------
+  crf: 23                      # 画质，越小越清晰（18~28）
+  preset: veryfast             # x264 preset
+  audio_bitrate: 192k
+  fade_in: 0.0                 # 开头淡入秒数
+  tail_pad: 0.6                # 语音结束后追加的静音秒数（尾部留白），避免最后一句字幕刚出来就黑屏
+  concurrency: 1               # 同时合成几条
+
+run:
+  concurrency: 1
+  skip_existing: true          # 已有结果则跳过（断点续跑）
