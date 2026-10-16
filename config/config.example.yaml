@@ -8,6 +8,7 @@ paths:
   text_dir: ""             # 空则用 {workdir}/text
   voice_dir: ""            # 空则用 {workdir}/voice
   video_dir: ""            # 空则用 {workdir}/video
+  cover_dir: ""            # 空则用 {workdir}/cover（封面图）
   publish_dir: ""          # 空则用 {workdir}/publish（发布素材包与清单）
 
 # ---------- 1. 语音转文字 ----------
@@ -180,6 +181,15 @@ video:
   audio_bitrate: 192k
   fade_in: 0.0                 # 开头淡入秒数
   tail_pad: 0.6                # 语音结束后追加的静音秒数（尾部留白），避免最后一句字幕刚出来就黑屏
+
+  # ---- BGM（背景音乐）----
+  # 留空则只有人声。给了文件后会自动循环到视频结束，
+  # 人声一出现就把 BGM 压低（sidechaincompress 闪避），结尾自动淡出。
+  bgm: ""                      # 背景音乐文件，如 ./assets/bgm.mp3
+  bgm_volume: 0.18             # BGM 相对人声的音量（0~1），0.18 约比人声轻 15dB
+  bgm_duck: true               # 人声出现时自动压低 BGM
+  bgm_duck_ratio: 8.0          # 闪避压缩比，越大压得越狠
+  bgm_fade_out: 1.5            # BGM 结尾淡出秒数
   concurrency: 1               # 同时合成几条
 
 # ---------- 发布素材包（`wxcopy publish`）----------
@@ -193,6 +203,24 @@ publish:
   platforms: 视频号,抖音        # 清单里的「平台」列默认值
   concurrency: 1
   prompt: ""                   # 自定义提示词名或 .md 路径，留空用内置
+  auto_cover: true             # 表格和 --cover 都取不到封面时，自动从封面目录按名字兜底
+
+# ---------- 6. 成片封面（1080x1920 竖图） ----------
+# 只用到 Pillow，不走 AI 生图：零成本、可控、无水印。
+# 没装 Pillow 时 cover 阶段会提示：pip install -e ".[cover]"
+cover:
+  style: tech                  # tech 深色渐变 | plain 纯色 | light 浅色
+  width: 1080
+  height: 1920
+  accent: "#00F090"            # 强调色（标题下的分隔线）
+  bg: ""                       # 背景图路径；留空按 style 本地生成
+  bg_color: ""                 # plain/light 的底色；留空按 style 取默认
+  footer: ""                   # 页脚小字，例如你的账号名
+  font: ""                     # 字体名或字体文件路径；留空自动挑中文字体
+  title_max: 20                # 主标题最多几个字（超出截断）
+  subtitle_max: 24
+  jpeg: false                  # 输出 .jpg（体积小）而非 .png
+  concurrency: 1
 
 run:
   concurrency: 1

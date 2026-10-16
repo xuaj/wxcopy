@@ -57,7 +57,29 @@ class PathsCfg:
     text_dir: str = ""
     voice_dir: str = ""
     video_dir: str = ""
+    cover_dir: str = ""
     publish_dir: str = ""
+
+
+@dataclass
+class CoverCfg:
+    """封面图的默认参数（对应 core.cover.CoverCfg）。
+
+    画封面只用到 Pillow，不走 AI 生图：零成本、可控、无水印、不受网络影响。
+    Pillow 是可选依赖，没装时 cover 阶段会明确报错并提示安装方式。
+    """
+
+    style: str = "tech"  # tech 深色渐变 | plain 纯色 | light 浅色
+    width: int = 1080
+    height: int = 1920
+    accent: str = "#00F090"  # 强调色（分隔线）
+    bg: str = ""  # 背景图路径；留空按 style 本地生成
+    bg_color: str = ""  # plain/light 的底色；留空按 style 取默认
+    footer: str = ""  # 页脚小字，如项目名
+    font: str = ""  # 字体名或字体文件路径；留空自动挑中文字体
+    title_max: int = 20  # 主标题最多几个字（超出截断，断行另有算法）
+    subtitle_max: int = 24
+    jpeg: bool = False  # 输出 .jpg（体积小）而非 .png
 
 
 @dataclass
@@ -74,6 +96,7 @@ class PublishCfg:
     platforms: str = "视频号,抖音"  # 清单里的默认平台
     concurrency: int = 1
     prompt: str = ""  # prompt 名或 md 路径，留空用内置 default
+    auto_cover: bool = True  # 「封面」列/cover 目录都取不到时，自动用封面目录兜底
 
 
 @dataclass
@@ -224,6 +247,14 @@ class VideoCfg:
     audio_bitrate: str = "192k"
     fade_in: float = 0.0
     tail_pad: float = 0.6  # 语音结束后追加的静音秒数（尾部留白）
+
+    # ---- BGM（背景音乐）----
+    bgm: str = ""  # 背景音乐文件；留空则只有人声
+    bgm_volume: float = 0.18  # BGM 相对人声的音量
+    bgm_duck: bool = True  # 人声出现时自动压低 BGM
+    bgm_duck_ratio: float = 8.0  # 闪避压缩比
+    bgm_fade_out: float = 1.5  # BGM 结尾淡出秒数
+
     concurrency: int = 1
 
 
@@ -237,6 +268,7 @@ class Settings:
     tts: TTSCfg = field(default_factory=TTSCfg)
     video: VideoCfg = field(default_factory=VideoCfg)
     ocr: OcrCfg = field(default_factory=OcrCfg)
+    cover: CoverCfg = field(default_factory=CoverCfg)
     publish: PublishCfg = field(default_factory=PublishCfg)
     run: RunCfg = field(default_factory=RunCfg)
     config_path: str = ""
@@ -261,6 +293,10 @@ class Settings:
     @property
     def video_dir(self) -> Path:
         return Path(self.paths.video_dir or self.workdir / "video").expanduser().resolve()
+
+    @property
+    def cover_dir(self) -> Path:
+        return Path(self.paths.cover_dir or self.workdir / "cover").expanduser().resolve()
 
     @property
     def publish_dir(self) -> Path:
@@ -330,6 +366,7 @@ def load_settings(config: str | None = None) -> Settings:
         run=_take(raw.get("run") or {}, RunCfg),
         video=_take(raw.get("video") or {}, VideoCfg),
         ocr=_take(raw.get("ocr") or {}, OcrCfg),
+        cover=_take(raw.get("cover") or {}, CoverCfg),
         publish=_take(raw.get("publish") or {}, PublishCfg),
         config_path=loaded_from,
     )

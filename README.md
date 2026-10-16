@@ -9,8 +9,10 @@
 ```
 原始文案 ─(1 收集)─> 文案表 ─(2 仿写)─> 仿写文案 ─(3 配音)─> mp3 ─(4 合成)─> mp4
    ↑                   ↑                  ↑                ↑              ↑
-四种来源          faster-whisper     Ollama / 云厂商   edge-tts / 云TTS  背景 + 字幕
+四种来源          faster-whisper     Ollama / 云厂商   edge-tts / 云TTS  背景 + 字幕 + BGM
 见下表            云端 ASR 可选       可随时切换模型     离线引擎兜底   (图片/视频/纯色)
+
+成片之后还有两个可选环节：封面生成（`cover`）与发布素材包（`publish`）。
 ```
 
 **原始文案的四种来源**（阶段一，以前只能是音视频）：
@@ -39,6 +41,7 @@ pip install -e .
 ```
 
 > 跑测试/做开发请顺带装：`pip install -e ".[dev]"`
+> 要出封面请装 Pillow：`pip install -e ".[cover]"`（其余能力都是按需装，见下表）
 
 ### 外部依赖
 
@@ -49,9 +52,11 @@ pip install -e .
 | 视频合成 | `ffmpeg` | 系统没装时自动用 `imageio-ffmpeg` 内置二进制（已含 libass / libx264 / aac，够用）。**该内置包不含 ffprobe**，时长探测会自动退回用 ffmpeg 解码，精度一致 |
 | 大字字幕断行 | `jieba`（可选） | 按词断行更自然；没装会自动退回按字数切 |
 | 图片 OCR | `rapidocr-onnxruntime`（可选） | 本地离线中文 OCR，纯 CPU 可跑；没装时 `wxcopy ocr --engines` 会提示怎么装 |
-| 中文字幕 | 本机字体 | 默认 `Microsoft YaHei`；Linux/macOS 请把 `video.font` 改成已装字体名 |
+| 封面生成 | `Pillow`（可选） | 纯本地绘图，不走 AI 生图。没装时 `wxcopy cover` 会提示 `pip install -e ".[cover]"` |
+| 中文字幕 | 本机字体 | 默认 `Microsoft YaHei`；Linux/macOS 请把 `video.font` 改成已装字体名。封面会自动探测系统里的中文字体 |
 | 本地大模型 | [Ollama](https://ollama.com) | 需本机启动，默认 `http://127.0.0.1:11434` |
 | 配音 | `edge-tts` | 免费，需联网。顺带产出**逐字时间戳**（旁挂 `<名字>.cues.json`），字幕靠它对齐真实语音 |
+| 背景音乐 | 任意 mp3/wav/m4a | 自带一段 `assets/bgm_demo.mp3`（由 `scripts/make_demo_bgm.py` 合成，无版权问题）可直接试 |
 
 ---
 
@@ -94,9 +99,12 @@ pip install "fastapi>=0.115" "uvicorn[standard]>=0.30"
 进度是从流水线日志里解析的（`[n/m] 转写` / `仿写进度 n/m` / `配音进度 n/m` / `合成进度 n/m`），
 所以不需要改 pipeline 的既有签名。服务只监听 127.0.0.1，外部机器访问不到。
 
+> Web 控制台目前覆盖前四个阶段。**封面生成（`cover`）、BGM 混音、发布素材包（`publish`）
+> 只在命令行里**——它们更接近「手工调版式 / 挑标题」的活儿，界面上反而不好用。
+
 ---
 
-## 二、功能模块（四阶段 + 可选发布包）
+## 二、功能模块（四阶段 + 封面 + 可选发布包）
 
 ### 模块 1：收集原始文案（`source`）——四种来源
 
@@ -362,6 +370,44 @@ wxcopy video in.xlsx --column 仿写文案 --bg-color "#0f172a"
 wxcopy video in.xlsx --column 仿写文案 -b bg.jpg --size "横屏 1920x1080" --no-subtitle --crf 18
 ```
 
+#### 背景音乐（`--bgm`）与自动闪避
+
+加一段 BGM，人声一出现就自动把音乐压低（不用手调关键帧）：
+
+```bash
+# 背景音乐（比人声短会自动循环到视频结束）
+wxcopy video in.xlsx --column 仿写文案 -b bg.jpg --bgm assets/bgm_demo.mp3
+
+# 调音量 / 关掉闪避 / 改淡出
+wxcopy video in.xlsx --column 仿写文案 -b bg.jpg --bgm bgm.mp3 \
+    --bgm-volume 0.12 --bgm-duck-ratio 12 --bgm-fade-out 2.5
+```
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `--bgm` | 空 | 背景音乐文件；给了它，即使没给 `--bg` 也会触发视频合成 |
+| `--bgm-volume` | `0.18` | BGM 相对人声的音量（0~1），0.18 约比人声轻 15dB |
+| `--bgm-duck` / `--no-bgm-duck` | 开 | 人声出现时自动压低 BGM |
+| `--bgm-duck-ratio` | `8` | 闪避压缩比，越大压得越狠 |
+| `--bgm-fade-out` | `1.5` | BGM 结尾淡出秒数，`0` = 不淡出 |
+
+实现上的几个关键点（都是踩出来的）：
+
+- **闪避用 `sidechaincompress`，把人声当侧链**。人声必须先 `asplit` 分成两路再分别喂给
+  `sidechaincompress` 和 `amix`——同一路标签被两个滤镜直接消费、且图里还有视频流时，
+  ffmpeg 会报 `Stream specifier ... matches no streams`（实测 ffmpeg 7.1；
+  同一张图单独跑纯音频却完全正常，所以这个坑很难查）。
+- **`amix` 必须 `normalize=0`**：默认会把每路各降一半，人声会莫名其妙变小。
+- **`amix` 用 `duration=first`、人声排第一路**：BGM 是 `-stream_loop -1` 的无限流，
+  放前面会让输出永不结束。
+- **只在有 BGM 时才统一采样格式**（44.1kHz 立体声）。edge-tts 是 24k 单声道、
+  音乐多是 44.1k 立体声，不统一没法混；但没 BGM 的场景就不动它，
+  免得不需要混音的人音频格式也被改了。
+- **BGM 进指纹**：换文件、改音量/闪避/淡出都会让视频重出。而且比的是
+  「文件大小 + 修改时间」而不是路径——同名换文件也能被认出来。
+  可复跑的验证脚本在 `scripts/verify_bgm.py`（合成素材 + 频谱分析，
+  实测人声段 BGM 被压低 21.8dB、静音段 0dB、结尾正常淡出）。
+
 常用参数：
 
 | 参数 | 说明 |
@@ -378,6 +424,7 @@ wxcopy video in.xlsx --column 仿写文案 -b bg.jpg --size "横屏 1920x1080" -
 | `--font-size` `--chars-per-line` `--margin-v` | classic 样式：字号 / 每行字数 / 字幕距底部像素 |
 | `--tail-pad` | 语音结束后的留白秒数，默认 0.6 |
 | `--fade-in` | 开头淡入秒数，默认 0（不淡入） |
+| `--bgm` `--bgm-volume` `--bgm-duck` `--bgm-duck-ratio` `--bgm-fade-out` | 背景音乐与自动闪避，见上一节 |
 | `--audio-column` | 配音路径所在列，默认「配音」；取不到就按文件名规则去 `voice/` 里找 |
 | `-j` | 合成并发数（CPU 转码，建议 1~4） |
 
@@ -467,6 +514,69 @@ wxcopy publish in.xlsx --column 仿写文案 --no-llm
 **话题标签**会自动补 `#`、去掉内部空格（空格会让平台把后面的字当正文）、去重；
 `--keyword` 指定的词一定会出现。
 
+> 封面哪来的？见下一节。`publish` 会按「表格的『封面』列 → `--cover` 指定 → 封面目录里按名字找」
+> 的顺序自动带上，所以先跑 `wxcopy cover` 再跑 `wxcopy publish` 就不用额外传参了。
+
+### 模块 6：成片封面（`cover`）
+
+生成 **1080×1920 竖图**封面，用标题 + 副标题 + 页脚排出来。
+
+**纯本地绘图，不走 AI 生图**：渐变 + 光晕 + 网格都是代码画的，
+零成本、可复现、无水印、不受网络影响。想用现成背景图就传 `--bg`。
+
+```bash
+# 单张：给一段文案，自动提炼标题
+wxcopy cover --text "做视频号最费时间的不是拍摄，是文案。四步自动化。" --name 封面
+
+# 单张：直接指定标题与副标题
+wxcopy cover --title "开源免费AI工具推荐" --subtitle "wxcopy：本地Ollama免费仿写" \
+    --footer "wxcopy 开源项目"
+
+# 批量：整张表出封面，并把路径回写到「封面」列
+wxcopy cover ./output/transcripts.xlsx --title-column 推荐标题 --column 仿写文案
+
+# 换风格 / 换强调色 / 输出 jpg（体积小一半）
+wxcopy cover in.xlsx --style light
+wxcopy cover in.xlsx --style plain --bg-color "#0f172a" --accent "#00F090"
+wxcopy cover in.xlsx --jpeg
+```
+
+三种内置风格：
+
+| `--style` | 观感 |
+|---|---|
+| `tech`（默认） | 深蓝渐变 + 底部霓虹光晕 + 细网格，科技感 |
+| `plain` | 纯色底（`--bg-color`，默认深藏青） |
+| `light` | 浅色底 + 深色字（`--bg-color` 默认近白），适合资讯/知识类 |
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `--text` / `--title` / `--subtitle` / `--name` | — | 单张模式；`--text` 会取第一句当标题 |
+| `--title-column` | `推荐标题` | 批量模式优先用它；该列不存在或为空时，从 `--column` 的文案里提炼 |
+| `--column` | `仿写文案` | 批量模式：用来提炼标题的文案列 |
+| `--subtitle-column` | 空 | 批量模式：每行各自的副标题列 |
+| `--out-column` | `封面` | 回写封面路径的列名 |
+| `--footer` | 空 | 页脚小字，一般写账号名/项目名 |
+| `--accent` | `#00F090` | 强调色（标题下的分隔线） |
+| `--title-max` / `--subtitle-max` | `20` / `24` | 超出即截断 |
+| `--font` | 自动 | 字体名或字体文件路径；自动按 SimHei → 雅黑 Bold → PingFang → Noto CJK → 文泉驿 顺序挑 |
+| `--jpeg` / `--png` | `--png` | 输出格式 |
+| `--force` | — | 忽略已有封面全部重画 |
+
+产物默认在 `{workdir}/cover/`，命名与视频一致（`001_xxx.png`），这样
+`publish` 能按名字直接对上。
+
+几个实现细节：
+
+- **断行按「显示宽度」而不是字数**：ASCII 算半个字，所以「开源免费AI工具推荐」
+  会切成 `开源免费AI / 工具推荐`，而不是 `开源免费A / I工具推荐`。
+- **标点不落行首**：「做视频号最费时间的不是拍摄，是文案」断成
+  `做视频号最费 / 时间的不是拍摄，/ 是文案`，逗号跟着上一行走。
+- **字号自适应**：标题长短差别很大，硬编码字号必然要么溢出要么小得可怜，
+  所以每行都从大往小试到能塞进画面宽度为止。
+- **有参数指纹**（`<名字>.cover.txt`）：标题、副标题、任一渲染参数变了就重画，
+  一致就跳过——和视频那边同一套规矩，避免「改了参数却看到旧图」。
+
 ### 一条龙
 
 ```bash
@@ -476,12 +586,18 @@ wxcopy run D:\data\test -w ./output --provider ollama --model qwen2.5:7b --limit
 # 给了 --bg 就顺带把视频也合出来
 wxcopy run D:\data\test -w ./output --limit 5 --bg D:\素材\背景.jpg --size "竖屏 1080x1920"
 
+# 只给 --bgm 也会触发视频合成
+wxcopy run D:\data\test -w ./output --limit 5 --bg D:\素材\背景.jpg --bgm assets/bgm_demo.mp3
+
 # 也可以不从视频开始：手输 / 图片 / Excel 都支持
 wxcopy run --from text  --text "小店没客流怎么办？三招把路人变成回头客" -w ./output
 wxcopy run --from image --image D:\素材\海报目录 -w ./output
 wxcopy run --from table --table D:\data\待仿写文案.xlsx --column 原始文案 \
            -w ./output --bg D:\素材\背景.jpg --size "竖屏 1080x1920"
 ```
+
+一条龙目前只跑到视频。封面（`wxcopy cover`）和发布包（`wxcopy publish`）
+因为通常要人工挑标题、调版式，设计上留成两条独立命令。
 
 ---
 
@@ -491,18 +607,23 @@ wxcopy run --from table --table D:\data\待仿写文案.xlsx --column 原始文�
 wxcopy/
 ├── config/config.example.yaml    # 配置模板（含全部厂商端点预设）
 ├── .env.example                  # API Key 环境变量示例
+├── assets/bgm_demo.mp3           # 自带的演示 BGM（无版权问题，可换）
+├── scripts/
+│   ├── make_demo_bgm.py          # 生成上面那段 BGM（可复现）
+│   └── verify_bgm.py             # 用合成素材 + 频谱分析验证闪避/循环/淡出
 ├── src/wxcopy/
 │   ├── cli.py                    # 命令行入口（typer）
 │   ├── settings.py               # 配置加载（YAML + ${ENV} 插值，多份合并）
-│   ├── pipeline.py               # 四阶段编排 + VideoOverrides（阶段四参数）
+│   ├── pipeline.py               # 各阶段编排 + VideoOverrides / CoverOverrides
 │   ├── core/
 │   │   ├── source.py             # 阶段一：四种文案来源 + OCR 后端
 │   │   ├── asr.py                # 音视频转写：faster-whisper + 云端 ASR
 │   │   ├── llm.py                # 模块2：Ollama + OpenAI 兼容云厂商
 │   │   ├── rewriter.py           # 模块2：prompt 模板、清洗、批量并发
 │   │   ├── tts.py                # 模块3：edge / openai / pyttsx3
-│   │   ├── video.py              # 模块4：背景 + ASS 字幕 + ffmpeg 合成
+│   │   ├── video.py              # 模块4：背景 + ASS 字幕 + BGM 混音 + ffmpeg 合成
 │   │   ├── publish.py            # 模块5：标题/简介/话题 + 发布素材包与清单
+│   │   ├── cover.py              # 模块6：封面排版与绘制（Pillow 可选）
 │   │   └── media.py              # 抽音轨、时长探测、文件名安全化
 │   ├── io/table.py               # Excel/CSV/TSV 读写（openpyxl 原地写列）
 │   ├── web/                      # FastAPI 控制台（app.py / jobs.py / static/index.html）
@@ -527,10 +648,12 @@ wxcopy/
                                 ↓
    阶段三 tts.py ───────→ edge / 云 TTS / pyttsx3 ──→ voice/*.mp3 + *.cues.json
                                 ↓
-   阶段四 video.py ─────→ ffmpeg + ASS 字幕 ────────→ video/*.mp4
+   阶段四 video.py ─────→ ffmpeg + ASS 字幕 + BGM ──→ video/*.mp4
                                 ↓
    阶段五 publish.py ───→ llm.py（可关闭）─────────→ publish/ 素材包 + 清单
         （可选，不发视频）
+
+   旁路：cover.py ──────→ Pillow 本地绘图 ──────────→ cover/*.png（publish 自动带上）
 ```
 
 四阶段之间只通过 `workdir/transcripts.xlsx` 传递状态，所以任一阶段都能单独重跑，
@@ -654,6 +777,36 @@ wxcopy 负责到**上传前**：`wxcopy publish` 把标题候选、简介、话�
 那是 `--tail-pad` 的尾部留白（默认 0.6 秒），用来让最后一句字幕停留一下而不是戛然而止。
 想紧贴语音结束就设 `--tail-pad 0`。
 
+**加了 BGM 之后听着还是吵 / 人声变小了**
+调小 `--bgm-volume`（默认 0.18 已经比人声轻约 15dB，可以试 0.10）。
+如果感觉是「人声自己变小了」，那多半不是 BGM 的问题——正常情况不会，
+`amix` 里刻意关掉了 `normalize` 就是为了防止这个。可以用
+`python scripts/verify_bgm.py` 在你机器上复现一遍量化结果。
+
+**BGM 换成同名文件了，但视频没重新生成**
+不会发生。BGM 进指纹时比的是「文件大小 + 修改时间」而不是路径，
+同名换文件也会被认出来。真遇到问题就加 `--force`。
+
+**BGM 循环的地方听着有接缝**
+`--bgm` 是按原文件首尾相接循环的，所以要么用本身能无缝循环的音乐，
+要么用比视频更长的 BGM（不触发循环）。
+
+**封面是空白的 / 生成失败**
+两种原因，报错信息会直接说明：
+
+- 缺 Pillow：`pip install -e ".[cover]"`
+- 系统里没有中文字体：用 `--font` 指定字体文件路径（如
+  `--font "C:/Windows/Fonts/simhei.ttf"`）。Linux 上装 `fonts-noto-cjk` 即可。
+
+**封面标题被截断了**
+`--title-max` 默认 20 字，超出会截断。既然标题是给用户一眼看到的，
+截断通常比缩小字号更合适；真需要更长就调大 `--title-max`，字号会自动缩。
+
+**封面字太小 / 太大**
+字号是按「最长那行能塞进画面宽度」自动算的，所以标题越长字越小。
+想让字大一点：`--title-max 12` 或 `--subtitle-max 16` 限制字数，
+或者把 `--style` 换成 `plain`（深底纯色，对比更强）。
+
 **字幕比语音快/慢半拍，越到后面越明显**
 先看合成日志里那行 `字幕时间轴：...`：
 
@@ -695,14 +848,24 @@ pytest -q tests/test_table.py            # 单个文件
 pytest -q -k "merge"                     # 按名字挑
 ```
 
-测试只覆盖**纯逻辑**（表格读写、配置解析、行序合并、视频指纹、文件名安全化），
-不碰模型调用和 ffmpeg，所以几秒就能跑完、也不需要 API Key。
+测试只覆盖**纯逻辑**（表格读写、配置解析、行序合并、视频/封面指纹、断行与排版、
+音频滤镜串拼接、文件名安全化），不碰模型调用和 ffmpeg，所以几秒就能跑完、也不需要 API Key。
+需要 Pillow / 中文字体的用例会自动跳过，不会因为你机器上没装而变红。
+
+需要真跑 ffmpeg 的验证脚本（不进单测，得手动跑）：
+
+```bash
+python scripts/verify_bgm.py      # BGM 循环 / 闪避深度 / 结尾淡出，量化输出
+```
 
 新增渲染参数时请留意两条测试会盯着你：
 
 - `test_sig_fields_all_exist_on_videocfg` —— `_SIG_FIELDS` 里写错字段名会立刻失败
   （否则新参数不进指纹，用户改了参数却看到旧片，这是最难查的一类 bug）
 - `test_sig_covers_typewriter_params` —— 同类防漏
+
+封面那边同理：`test_cover_sig_covers_every_core_field` 会遍历 `CoreCoverCfg`
+的**全部**字段，往 `CoverCfg` 加字段而忘了进指纹就会红。
 
 ### 代码规范
 

@@ -5,6 +5,8 @@ wxcopy transcribe   ./videos            # 视频 -> 文案表
 wxcopy rewrite      ./in.xlsx --column 文案
 wxcopy speak        ./in.xlsx --column 仿写文案
 wxcopy video        ./in.xlsx --column 仿写文案 -b bg.jpg
+wxcopy cover        ./in.xlsx            # 批量出封面；--text 出单张
+wxcopy publish      ./in.xlsx            # 发布素材包 + 清单
 wxcopy run          ./videos            # 一条龙
 wxcopy models                           # 查看可用模型后端
 """
@@ -330,6 +332,11 @@ def video(
     margin_v: Optional[int] = typer.Option(None, "--margin-v", help="字幕距底部像素"),
     chars_per_line: Optional[int] = typer.Option(None, "--chars-per-line", help="每行最多几个字"),
     tail_pad: Optional[float] = typer.Option(None, "--tail-pad", help="语音结束后的留白秒数，默认 0.6"),
+    bgm: Optional[Path] = typer.Option(None, "--bgm", help="背景音乐文件；人声出现时自动压低（闪避）"),
+    bgm_volume: Optional[float] = typer.Option(None, "--bgm-volume", help="BGM 相对人声的音量（0~1），默认 0.18"),
+    bgm_duck: Optional[bool] = typer.Option(None, "--bgm-duck/--no-bgm-duck", help="人声出现时自动压低 BGM，默认开"),
+    bgm_duck_ratio: Optional[float] = typer.Option(None, "--bgm-duck-ratio", help="闪避压缩比，越大压得越狠，默认 8"),
+    bgm_fade_out: Optional[float] = typer.Option(None, "--bgm-fade-out", help="BGM 结尾淡出秒数，默认 1.5"),
     fade_in: Optional[float] = typer.Option(None, "--fade-in", help="开头淡入秒数"),
     crf: Optional[int] = typer.Option(None, "--crf", help="画质，越小越清晰（18-28）"),
     sheet: Optional[str] = typer.Option(None, "--sheet"),
@@ -371,6 +378,11 @@ def video(
         tail_pad=tail_pad,
         fade_in=fade_in,
         crf=crf,
+        bgm=str(bgm) if bgm else None,
+        bgm_volume=bgm_volume,
+        bgm_duck=bgm_duck,
+        bgm_duck_ratio=bgm_duck_ratio,
+        bgm_fade_out=bgm_fade_out,
     )
     stage_video(
         st,
@@ -387,6 +399,81 @@ def video(
         skip_existing=not force,
     )
     console.print(f"[green]完成[/green] -> {out_dir or st.video_dir}")
+
+
+@app.command("cover", help="成片封面：标题/副标题 -> 1080x1920 竖图（可单张也可整表批量）")
+def cover(
+    table: Optional[Path] = typer.Argument(None, help="Excel/CSV 路径；单张模式可省略"),
+    text: Optional[str] = typer.Option(None, "--text", "-t", help="单张模式：直接给一段文案（自动提炼标题）"),
+    title: Optional[str] = typer.Option(None, "--title", help="单张模式：直接指定封面主标题"),
+    subtitle: Optional[str] = typer.Option(None, "--subtitle", help="副标题（批量时作为所有行的默认值）"),
+    name: Optional[str] = typer.Option(None, "--name", help="单张模式：输出文件名（不含后缀）"),
+    title_column: str = typer.Option("推荐标题", "--title-column", help="批量：主标题所在列（没有则从文案列提炼）"),
+    column: str = typer.Option("仿写文案", "--column", help="批量：文案所在列，用来提炼标题"),
+    subtitle_column: Optional[str] = typer.Option(None, "--subtitle-column", help="批量：副标题所在列"),
+    name_column: Optional[str] = typer.Option(None, "--name-column", help="批量：用该列命名产物"),
+    out_dir: Optional[Path] = typer.Option(None, "--out-dir", help="输出目录，默认 {workdir}/cover"),
+    out_column: str = typer.Option("封面", "--out-column", help="批量：回写封面路径的列名"),
+    style: Optional[str] = typer.Option(None, "--style", help="tech 深色渐变（默认）| plain 纯色 | light 浅色"),
+    bg: Optional[Path] = typer.Option(None, "--bg", "-b", help="背景图；留空按风格本地生成"),
+    bg_color: Optional[str] = typer.Option(None, "--bg-color", help="plain/light 的底色，如 #0f172a"),
+    accent: Optional[str] = typer.Option(None, "--accent", help="强调色，默认 #00F090"),
+    footer: Optional[str] = typer.Option(None, "--footer", help="页脚小字，如你的账号名"),
+    font: Optional[str] = typer.Option(None, "--font", help="字体名或字体文件路径；留空自动挑中文字体"),
+    title_max: Optional[int] = typer.Option(None, "--title-max", help="主标题最多几个字，默认 20"),
+    subtitle_max: Optional[int] = typer.Option(None, "--subtitle-max", help="副标题最多几个字，默认 24"),
+    jpeg: Optional[bool] = typer.Option(None, "--jpeg/--png", help="输出 .jpg（体积小）而不是 .png"),
+    sheet: Optional[str] = typer.Option(None, "--sheet"),
+    limit: Optional[int] = typer.Option(None, "--limit"),
+    force: bool = typer.Option(False, "--force", help="忽略已有封面，全部重画"),
+    workdir: Optional[Path] = typer.Option(None, "--workdir", "-w"),
+    config: Optional[str] = typer.Option(None, "--config", "-c"),
+    log_level: str = typer.Option("INFO", "--log-level"),
+    log_file: Optional[str] = typer.Option(None, "--log-file"),
+):
+    st = _boot(config, log_level, log_file)
+    if workdir:
+        st.paths.workdir = str(workdir)
+    from .core.cover import CoverError
+    from .pipeline import CoverOverrides, stage_cover
+
+    if table is None and not (text or title):
+        raise typer.BadParameter("要么给一个表格路径，要么用 --text / --title 出单张")
+
+    ov = CoverOverrides(
+        style=style,
+        bg=str(bg) if bg else None,
+        bg_color=bg_color,
+        accent=accent,
+        footer=footer,
+        font=font,
+        title_max=title_max,
+        subtitle_max=subtitle_max,
+        jpeg=jpeg,
+    )
+    try:
+        out = stage_cover(
+            st,
+            table,
+            ov,
+            text=text,
+            title=title,
+            subtitle=subtitle or "",
+            name=name or "",
+            title_column=title_column,
+            text_column=column,
+            subtitle_column=subtitle_column or "",
+            name_column=name_column,
+            out_dir=out_dir,
+            out_column=out_column,
+            sheet=sheet,
+            limit=limit,
+            skip_existing=not force,
+        )
+    except CoverError as e:
+        console.print(f"[red]封面生成失败[/red]：{e}")
+        raise typer.Exit(code=1) from e
+    console.print(f"[green]完成[/green] -> {out}")
 
 
 @app.command("publish", help="阶段五：成片 -> 发布素材包（标题/简介/话题 + 清单）")
@@ -474,6 +561,7 @@ def run(
     recursive: bool = typer.Option(False, "--recursive", "-r"),
     language: Optional[str] = typer.Option(None, "--language", "-l"),
     bg: Optional[Path] = typer.Option(None, "--bg", "-b", help="给了背景就顺带合成口播视频"),
+    bgm: Optional[Path] = typer.Option(None, "--bgm", help="背景音乐；给了也会触发视频合成"),
     size: Optional[str] = typer.Option(None, "--size"),
     no_subtitle: bool = typer.Option(False, "--no-subtitle"),
     log_level: str = typer.Option("INFO", "--log-level"),
@@ -508,9 +596,10 @@ def run(
         recursive=recursive,
         asr_language=language,
         bg_path=str(bg) if bg else None,
+        bgm=str(bgm) if bgm else None,
         size=size,
         subtitle=(False if no_subtitle else None),
-        make_video=bool(bg),
+        make_video=bool(bg or bgm),
         source=spec,
     )
     console.print(f"[green]全部完成[/green]\n  表格: {res['table']}\n  音频: {res['voice_dir']}")

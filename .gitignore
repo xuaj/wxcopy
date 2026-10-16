@@ -43,7 +43,7 @@ coverage.xml
 *.key
 
 # ---- 运行产物 ----
-# 流水线输出目录（transcripts.xlsx / text / voice / video / audio）
+# 流水线输出目录（transcripts.xlsx / text / voice / video / audio / cover）
 output/
 output_*/
 *.mp3
@@ -52,6 +52,19 @@ output_*/
 *.ass
 *.srt
 *.cues.json
+# 封面的参数指纹（与视频的 .src.txt 同理，按参数重画，不需要进版本库）
+*.cover.txt
+
+# ---- 手动验证脚本留下的目录 ----
+_bgm_probe/
+_demo_out/
+_demo_nobgm/
+_tmp_cv/
+_cover_probe/
+
+# ---- 自带素材例外 ----
+# 仓库里带一段 BGM 是为了让 `wxcopy video --bgm` 开箱可试（由 scripts/make_demo_bgm.py 生成）
+!assets/bgm_demo.mp3
 
 # ---- 本地配置（这些是个人覆盖，只提交 example）----
 config/config.yaml

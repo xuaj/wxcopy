@@ -143,6 +143,13 @@ class VideoCfg:
     fade_in: float = 0.0
     tail_pad: float = 0.6  # 语音结束后追加的静音秒数
 
+    # ---- BGM（背景音乐）----
+    bgm: str = ""  # 背景音乐文件；留空则只有人声
+    bgm_volume: float = 0.18  # BGM 相对人声的音量（0~1）；0.18 ≈ 比人声轻 15dB
+    bgm_duck: bool = True  # 人声出现时自动压低 BGM（sidechaincompress 闪避）
+    bgm_fade_out: float = 1.5  # BGM 结尾淡出秒数；0 = 不淡出
+    bgm_duck_ratio: float = 8.0  # 闪避压缩比，越大压得越狠
+
 
 # 句末标点：优先在这里断
 SENT_END = "。！？!?；;\n"
@@ -701,6 +708,89 @@ def _bg_filter(cfg: VideoCfg) -> str:
     return f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}"
 
 
+# 混音前统一采样格式：edge-tts 输出 24k 单声道，音乐多为 44.1k 立体声，
+# 不统一的话 amix 会因为格式不一致报错或静默丢声道。
+AUDIO_SR = 44100
+
+
+def build_audio_chain(cfg: VideoCfg, total: float, bgm_ok: bool = False) -> str:
+    """构造音频滤镜链（filter_complex 里 `;` 之后的那一段）。
+
+    输入下标约定：`[0:v]` 背景、`[1:a]` 配音、`[2:a]` BGM。
+
+    有 BGM 时：
+        [1:a] apad 补尾部静音 -> aformat -> asplit   => [voice] / [voice_sc]
+        [2:a] 音量 -> 结尾淡出 -> aformat             => [bgm0]
+        [bgm0][voice_sc] sidechaincompress            => [bgmd]  ← 人声当侧链，自动闪避
+        [voice][bgmd]    amix(duration=first)         => [a]
+
+    四个容易踩的点：
+    - `amix` 默认 `normalize=1`，会把每路各降一半，人声直接变小；必须关掉。
+    - `amix` 的 `duration=first` 取的是**第一路**的长度，所以人声要放第一位，
+      否则 BGM 是无限流（`-stream_loop -1`）会导致输出永不结束。
+    - 人声必须先用 `asplit` 分成两路再分别喂给 `sidechaincompress` 和 `amix`。
+      同一路标签被两个滤镜直接消费、且图里还有视频流时，ffmpeg 会报
+      `Stream specifier '...' in filtergraph description ... matches no streams`。
+      实测 ffmpeg 7.1；同一张图单独跑音频却完全正常，所以这个坑很难查。
+    - 混音前必须统一采样格式：edge-tts 是 24k 单声道，音乐多为 44.1k 立体声。
+    """
+    total = max(0.1, float(total))
+    pad = f"apad=pad_dur={max(0.0, cfg.tail_pad):.2f}"
+
+    bgm = (cfg.bgm or "").strip()
+    if not (bgm and bgm_ok):
+        # 没有 BGM 时保持原样：只补尾部静音。
+        # 不要顺手统一采样格式——那会把所有人的单声道 24k 音频都变成立体声 44.1k，
+        # 对不需要混音的场景纯属扩大影响面。
+        return f"[1:a]{pad}[a]"
+
+    # 混音要一个共同格式：edge-tts 是 24k 单声道，音乐多是 44.1k 立体声。
+    # 统一到立体声后每声道幅度约 0.707 倍，总功率不变，但峰值低 3dB，混音更不容易削顶。
+    fmt = f"aformat=sample_fmts=fltp:sample_rates={AUDIO_SR}:channel_layouts=stereo"
+
+    steps = [f"volume={max(0.0, float(cfg.bgm_volume)):.3f}"]
+    fade = max(0.0, float(cfg.bgm_fade_out))
+    if fade > 0:
+        st = max(0.0, total - fade)
+        steps.append(f"afade=t=out:st={st:.2f}:d={fade:.2f}")
+    steps.append(fmt)
+    bgm_line = f"[2:a]{','.join(steps)}[bgm0]"
+
+    mix_tail = "amix=inputs=2:duration=first:dropout_transition=0:normalize=0[a]"
+    if cfg.bgm_duck:
+        ratio = max(1.0, float(cfg.bgm_duck_ratio))
+        voice_line = f"[1:a]{pad},{fmt},asplit=2[voice][voice_sc]"
+        # level_sc 把人声侧链抬高一点，轻人声也能触发压缩
+        duck_line = (
+            f"[bgm0][voice_sc]sidechaincompress=threshold=0.030:ratio={ratio:g}"
+            f":attack=20:release=400:level_sc=1.5[bgmd]"
+        )
+        return f"{voice_line};{bgm_line};{duck_line};[voice][bgmd]{mix_tail}"
+
+    voice_line = f"[1:a]{pad},{fmt}[voice]"
+    return f"{voice_line};{bgm_line};[voice][bgm0]{mix_tail}"
+
+
+def file_stamp(p: str) -> str:
+    """文件的「指纹」：大小 + 修改时间，不读全文件（BGM 动辄几 MB）。
+
+    只比对路径的话，用户换个同名文件就会被当成「没变」，听到的却是旧音乐。
+    空路径必须显式返回空串——`Path("")` 是当前目录，会拿到 cwd 的时间戳，
+    而产物目录每写一个文件就会变，等于让指纹永远失效。
+    """
+    s = (p or "").strip()
+    if not s:
+        return ""
+    f = Path(s).expanduser()
+    try:
+        if not f.is_file():
+            return ""
+        st = f.stat()
+    except OSError:
+        return ""
+    return f"{st.st_size}:{st.st_mtime_ns}"
+
+
 def make_video(
     audio: Path, out_path: Path, text: str = "", cfg: VideoCfg | None = None, duration: float | None = None
 ) -> Path:
@@ -761,12 +851,34 @@ def make_video(
     if cfg.fade_in > 0:
         chain.append(f"fade=t=in:st=0:d={cfg.fade_in}")
 
-    # 音频尾部补静音，避免最后一句字幕刚出来就黑屏
-    audio_chain = f"[1:a]apad=pad_dur={cfg.tail_pad:.2f}[a]"
+    # BGM：路径要在脚本侧转绝对（下面 ffmpeg 的 cwd 是产物目录），文件不在就降级为不加
+    bgm_path = ""
+    if (cfg.bgm or "").strip():
+        bp = Path(cfg.bgm).expanduser()
+        if bp.is_file():
+            bgm_path = str(bp.resolve())
+        else:
+            log.warning("BGM 文件不存在，本条按无人声背景乐处理：%s", cfg.bgm)
+
+    # 画面总时长 = 语音 + 尾部留白（BGM 的淡出位置按这个算）
+    total = max(1.0, dur) + max(0.0, cfg.tail_pad)
+    audio_chain = build_audio_chain(cfg, total, bgm_ok=bool(bgm_path))
+    if bgm_path:
+        log.info(
+            "   %s BGM：%s，音量 %.2f，闪避 %s，淡出 %.1fs",
+            out_path.name,
+            Path(bgm_path).name,
+            cfg.bgm_volume,
+            "开" if cfg.bgm_duck else "关",
+            cfg.bgm_fade_out,
+        )
 
     cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
     cmd += bg_args
     cmd += ["-i", str(audio)]
+    if bgm_path:
+        # 循环到画面结束；实际长度由 amix(duration=first) 跟着人声走
+        cmd += ["-stream_loop", "-1", "-i", bgm_path]
     cmd += [
         "-filter_complex",
         f"[0:v]{','.join(chain)}[v];{audio_chain}",

@@ -2,6 +2,48 @@
 
 本项目用语义化版本：`主版本.次版本.修订号`。
 
+## [0.5.0] - 2026-10-16
+
+### 新增
+
+- **`wxcopy cover`（模块 6）：成片封面生成**。标题 + 副标题 + 页脚排成 1080×1920 竖图。
+  **纯本地绘图，不走 AI 生图**：渐变、光晕、网格都是代码画的，零成本、可复现、无水印。
+  - 单张：`wxcopy cover --text "一段文案"`（自动取第一句当标题）或 `--title/--subtitle`
+  - 批量：`wxcopy cover in.xlsx`，逐行出图并把路径回写到「封面」列
+  - 三种风格 `--style tech|plain|light`，可换强调色、背景图、页脚、字体、jpg 输出
+  - 标题取值优先级：表格「推荐标题」列 → 从「仿写文案」列提炼 → 行名
+  - `core/cover.py`：`make_cover()` / `make_many()` / `plan_lines()` / `wrap_lines()` / `title_of()`
+- **BGM 混音与自动闪避**：`wxcopy video --bgm bgm.mp3`。
+  - BGM 比视频短会自动循环铺满；`--bgm-volume`（默认 0.18）调相对音量
+  - 人声一出现就自动压低 BGM（`sidechaincompress` 把人声当侧链），`--bgm-duck-ratio` 调压缩比
+  - `--bgm-fade-out`（默认 1.5s）结尾淡出；`--no-bgm-duck` 可关掉闪避
+  - 新增配置项 `video.bgm` / `bgm_volume` / `bgm_duck` / `bgm_duck_ratio` / `bgm_fade_out`
+- `assets/bgm_demo.mp3`：自带的演示 BGM（由 `scripts/make_demo_bgm.py` 合成，无版权问题）。
+- `scripts/verify_bgm.py`：用合成素材 + 频谱分析量化验证 BGM 循环/闪避/淡出。
+- `publish` 自动找封面：表格「封面」列 → `--cover` → 封面目录里按名字找（配置 `publish.auto_cover`）。
+- 可选依赖 `.[cover]`（Pillow）；`paths.cover_dir` 与 `cover.*` 配置段。
+- `tests/test_cover.py`（32 条）+ `tests/test_bgm.py`（26 条），共 178 条单测。
+
+### 修复
+
+- 封面标题断行把标点甩到行首（「…不是拍 / 摄，是文案」）：换行前先看下一个字符是不是收尾标点。
+- 封面按字数断行导致中英混排被切断（「开源免费A / I工具推荐」）：改按显示宽度（ASCII 算半个字）。
+- 封面 `light` 风格的字看不见：底色默认写死成深色，与深色字撞车；改为按风格取默认底色。
+- 封面 `tech` 风格死黑：早期把整图 blend 到黑来压网格，把光晕一起压没了；改为在独立透明层上低 alpha 合成。
+- `title_of()` 对超长首句会硬截断（「…，本地Oll…」）：改为退一步取第一个逗号前的分句。
+- 封面中文串 `wxcopy：...` 的冒号不落行首。
+
+### 说明
+
+- `amix` 必须显式 `normalize=0`（默认会把每路各降一半，人声会莫名变小）；
+  `duration=first` 要求人声排第一路，否则无限循环的 BGM 会让输出永不结束。
+- 人声必须先 `asplit` 成两路再分别喂 `sidechaincompress` 和 `amix`：同一路标签被两个滤镜
+  直接消费、且图里还有视频流时，ffmpeg 会报 `Stream specifier ... matches no streams`
+  （实测 ffmpeg 7.1；同一张图单独跑纯音频却正常，属难查的坑）。
+- 只在有 BGM 时才把音频统一成 44.1kHz 立体声；没有 BGM 的场景保持原样（24k 单声道），
+  避免把不需要混音的人的音轨也改掉。
+- BGM 进视频指纹时比的是「文件大小 + 修改时间」而不是路径，同名换文件也能触发重出。
+
 ## [0.4.0] - 2026-10-15
 
 ### 新增

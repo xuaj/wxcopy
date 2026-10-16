@@ -9,3 +9,4 @@ faster-whisper>=1.0
 imageio-ffmpeg>=0.4.9
 jieba>=0.42            # 大字字幕按词断行（可选）
 rapidocr-onnxruntime>=1.3   # 图片 OCR 本地离线中文（可选）
+Pillow>=10.0           # 成片封面生成（可选）

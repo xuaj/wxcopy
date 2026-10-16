@@ -109,6 +109,12 @@ class VideoOverrides:
     tail_pad: float | None = None
     fade_in: float | None = None
     crf: int | None = None
+    # ---- BGM ----
+    bgm: str | None = None
+    bgm_volume: float | None = None
+    bgm_duck: bool | None = None
+    bgm_duck_ratio: float | None = None
+    bgm_fade_out: float | None = None
 
     @classmethod
     def coerce(cls, data: dict | None) -> "VideoOverrides":
@@ -441,12 +447,26 @@ _SIG_FIELDS = (
     "audio_bitrate",
     "fade_in",
     "tail_pad",
+    # BGM：必须在这里，否则改了 BGM/音量却看到旧片（有测试盯着）
+    "bgm",
+    "bgm_volume",
+    "bgm_duck",
+    "bgm_duck_ratio",
+    "bgm_fade_out",
 )
 
 
 def _video_sig(text: str, cfg, cues_digest: str = "") -> str:
-    """文案 + 渲染参数 + 语音时间轴的指纹。任一变化 → 指纹变化 → 重出。"""
-    payload = {"t": text, "c": {k: getattr(cfg, k, None) for k in _SIG_FIELDS}, "a": cues_digest}
+    """文案 + 渲染参数 + 语音时间轴 + BGM 文件的指纹。任一变化 → 指纹变化 → 重出。"""
+    from .core.video import file_stamp
+
+    payload = {
+        "t": text,
+        "c": {k: getattr(cfg, k, None) for k in _SIG_FIELDS},
+        "a": cues_digest,
+        # 换一个同名 BGM 文件时，光比路径看不出来，得比文件本身
+        "m": file_stamp(getattr(cfg, "bgm", "") or ""),
+    }
     blob = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
     return hashlib.sha1(blob.encode("utf-8")).hexdigest()
 
@@ -552,6 +572,12 @@ def stage_video(
         audio_bitrate=v.audio_bitrate,
         tail_pad=float(ov.tail_pad if ov.tail_pad is not None else v.tail_pad),
         fade_in=float(ov.fade_in if ov.fade_in is not None else v.fade_in),
+        # ---- BGM ----
+        bgm=(ov.bgm if ov.bgm is not None else v.bgm),
+        bgm_volume=float(ov.bgm_volume if ov.bgm_volume is not None else v.bgm_volume),
+        bgm_duck=(v.bgm_duck if ov.bgm_duck is None else bool(ov.bgm_duck)),
+        bgm_duck_ratio=float(ov.bgm_duck_ratio if ov.bgm_duck_ratio is not None else v.bgm_duck_ratio),
+        bgm_fade_out=float(ov.bgm_fade_out if ov.bgm_fade_out is not None else v.bgm_fade_out),
     )
     from .core.video import big_font_size_of, pick_font
 
@@ -566,12 +592,18 @@ def stage_video(
                 f"{f' {cfg.type_speed:g}s/字' if cfg.type_speed > 0 else f' 停留{cfg.type_hold:.0%}'})"
             )
     log.info(
-        "视频参数：%dx%d，背景=%s，字幕=%s%s",
+        "视频参数：%dx%d，背景=%s，字幕=%s%s%s",
         cfg.width,
         cfg.height,
         cfg.bg_path or f"纯色{cfg.bg_color}",
         cfg.subtitle,
         font_desc,
+        (
+            f"，BGM={Path(cfg.bgm).name}（音量{cfg.bgm_volume:g}，闪避{'开' if cfg.bgm_duck else '关'}，"
+            f"淡出{cfg.bgm_fade_out:g}s）"
+            if (cfg.bgm or "").strip()
+            else ""
+        ),
     )
 
     vdir = Path(out_dir) if out_dir else settings.video_dir
@@ -632,6 +664,182 @@ def _pick_cover(row: dict, cover_col: str, cover_arg: str, name: str) -> str:
                 if hit.is_file():
                     return str(hit.resolve())
     return ""
+
+
+@dataclass
+class CoverOverrides:
+    """封面渲染参数的覆盖项。
+
+    和 VideoOverrides 同规矩：`None` = 不覆盖，沿用配置。
+    默认成 0 / "" 会把配置里的值冲掉，这种坑踩过一次就够了。
+    """
+
+    style: str | None = None
+    width: int | None = None
+    height: int | None = None
+    accent: str | None = None
+    bg: str | None = None
+    bg_color: str | None = None
+    footer: str | None = None
+    font: str | None = None
+    title_max: int | None = None
+    subtitle_max: int | None = None
+    jpeg: bool | None = None
+
+    @classmethod
+    def coerce(cls, data: dict | None) -> "CoverOverrides":
+        if not data:
+            return cls()
+        names = set(cls.__dataclass_fields__)
+        return cls(**{k: v for k, v in data.items() if k in names})
+
+
+def _cover_sig(title: str, subtitle: str, cfg) -> str:
+    """封面指纹：标题 / 副标题 / 任一渲染参数变了都要重画。
+
+    参数字段**直接取自 CoreCoverCfg 的 dataclass 字段**，而不是手写一份清单——
+    手写清单迟早会漏（改了参数却看到旧图）。视频阶段就为此专门加过两条测试。
+    """
+    from .core.cover import CoverCfg as CoreCoverCfg
+
+    payload = {
+        "t": title,
+        "s": subtitle,
+        "c": {k: getattr(cfg, k, None) for k in CoreCoverCfg.__dataclass_fields__},
+    }
+    blob = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha1(blob.encode("utf-8")).hexdigest()
+
+
+def _cover_fresh(cdir: Path, name: str, sig: str, ext: str) -> bool:
+    img = cdir / f"{name}{ext}"
+    side = cdir / f"{name}.cover.txt"
+    if not img.is_file() or not side.is_file():
+        return False
+    try:
+        return side.read_text(encoding="utf-8").strip() == sig
+    except OSError:
+        return False
+
+
+def stage_cover(
+    settings: Settings,
+    table: Path | str | None = None,
+    overrides: CoverOverrides | dict | None = None,
+    *,
+    text: str | None = None,
+    title: str | None = None,
+    subtitle: str = "",
+    name: str = "",
+    title_column: str = "推荐标题",
+    text_column: str = "仿写文案",
+    subtitle_column: str = "",
+    name_column: str | None = None,
+    out_dir: Path | str | None = None,
+    out_column: str = "封面",
+    sheet: str | None = None,
+    limit: int | None = None,
+    skip_existing: bool = True,
+) -> Path:
+    """生成成片封面（默认 1080×1920 竖图）。
+
+    两种用法：
+    - **单张**：给 `text`（或 `title`），出一张，返回图片路径。
+    - **批量**：给 `table`，逐行出图并回写「封面」列，返回表格路径。
+
+    标题取值优先级：表格的「推荐标题」列 > `title_of(「仿写文案」列)` > 规则名。
+    生成只用到 Pillow（可选依赖），字体在系统里自动挑；两者缺一都会明确报错。
+    """
+    from .core.cover import CoverCfg as CoreCoverCfg
+    from .core.cover import make_cover, title_of
+
+    ov = overrides if isinstance(overrides, CoverOverrides) else CoverOverrides.coerce(overrides)
+    c = settings.cover
+    cfg = CoreCoverCfg(
+        width=int(ov.width or c.width),
+        height=int(ov.height or c.height),
+        style=(ov.style or c.style),
+        bg=(ov.bg if ov.bg is not None else c.bg),
+        bg_color=(ov.bg_color if ov.bg_color is not None else c.bg_color),
+        accent=(ov.accent or c.accent),
+        title_max=int(ov.title_max or c.title_max),
+        subtitle_max=int(ov.subtitle_max or c.subtitle_max),
+        footer=(ov.footer if ov.footer is not None else c.footer),
+        font=(ov.font if ov.font is not None else c.font),
+        jpeg=(c.jpeg if ov.jpeg is None else bool(ov.jpeg)),
+    )
+    ext = ".jpg" if cfg.jpeg else ".png"
+
+    cdir = Path(out_dir) if out_dir else settings.cover_dir
+
+    # ---------- 单张模式 ----------
+    if table is None:
+        t = (title or "").strip() or title_of(text or "", cfg.title_max) or "未命名"
+        nm = name or "cover"
+        cdir.mkdir(parents=True, exist_ok=True)
+        p = make_cover(t, cdir / f"{nm}{ext}", cfg, subtitle=subtitle)
+        log.info("封面完成：%s（%s）", p, t)
+        return p
+
+    # ---------- 批量模式 ----------
+    from .core.cover import CoverError
+
+    path = Path(table)
+    rows, columns = read_table(path, sheet=sheet)
+    if not rows:
+        raise ValueError(f"{path} 没有数据行")
+
+    text_col = resolve_column(columns, text_column) if text_column in columns else ""
+    title_col = resolve_column(columns, title_column) if title_column in columns else ""
+    sub_col = resolve_column(columns, subtitle_column) if subtitle_column in columns else ""
+    name_col = resolve_column(columns, name_column) if name_column else _default_name_col(columns)
+
+    if limit:
+        rows = rows[:limit]
+    cdir.mkdir(parents=True, exist_ok=True)
+
+    ok = 0
+    reused = 0
+    failed = 0
+    paths: dict[str, Path] = {}
+    for i, r in enumerate(rows, 1):
+        nm = _row_name(r, name_col, i)
+        raw_title = str(r.get(title_col) or "").strip() if title_col else ""
+        body = str(r.get(text_col) or "").strip() if text_col else ""
+        t = raw_title or title_of(body, cfg.title_max) or nm
+        sub = (str(r.get(sub_col) or "").strip() if sub_col else "") or subtitle
+
+        sig = _cover_sig(t, sub, cfg)
+        if skip_existing and _cover_fresh(cdir, nm, sig, ext):
+            paths[nm] = cdir / f"{nm}{ext}"
+            reused += 1
+            continue
+        try:
+            p = make_cover(t, cdir / f"{nm}{ext}", cfg, subtitle=sub)
+        except CoverError:
+            # Pillow 没装 / 系统里没有中文字体：这是环境问题，不是某一行的数据问题。
+            # 静默吞掉的话用户会看到「完成 0 张」却不知道原因，所以直接抛出去。
+            raise
+        except Exception as e:  # noqa: BLE001
+            log.error("封面生成失败 %s：%s", nm, str(e)[:120])
+            failed += 1
+            continue
+        try:
+            (cdir / f"{nm}.cover.txt").write_text(sig, encoding="utf-8")
+        except OSError as e:  # noqa: BLE001
+            log.warning("写入封面指纹失败 %s：%s", nm, str(e)[:80])
+        paths[nm] = p
+        ok += 1
+
+    log.info("封面完成 %d 张（沿用已有 %d 张，失败 %d 张）-> %s", ok, reused, failed, cdir)
+
+    final: list[tuple[Any, str]] = []
+    for i, r in enumerate(rows, 1):
+        nm = _row_name(r, name_col, i)
+        hit = paths.get(nm) or (cdir / f"{nm}{ext}")
+        final.append((i, str(hit.resolve()) if hit.is_file() else ""))
+    write_column(path, out_column, final, sheet=sheet)
+    return path
 
 
 def stage_publish(
@@ -740,7 +948,9 @@ def stage_publish(
         if video and not Path(video).is_file():
             found = settings.video_dir / f"{name}.mp4"
             video = str(found) if found.is_file() else ""
-        cover_path = _pick_cover(r, cover_col, cover or "", name)
+        # 封面兜底顺序：「封面」列 -> --cover 指定 -> 封面目录里按名字找
+        cover_arg = cover or (str(settings.cover_dir) if settings.publish.auto_cover else "")
+        cover_path = _pick_cover(r, cover_col, cover_arg, name)
         if bundle:
             write_bundle(pdir, name, c, video=video, cover=cover_path)
         plan.append(plan_row(i, name, c, video=video, cover=cover_path, platforms=cfg.platforms))
@@ -779,6 +989,7 @@ def run_pipeline(
     recursive: bool = False,
     asr_language: str | None = None,
     bg_path: str | None = None,
+    bgm: str | None = None,
     size: str | None = None,
     subtitle: bool | None = None,
     make_video: bool = False,
@@ -822,12 +1033,12 @@ def run_pipeline(
     )
     stage_tts(st, table, text_column="仿写文案", name_column="文件原名", voice=voice, limit=limit)
     out = {"table": table, "voice_dir": st.voice_dir}
-    # 传了背景才出视频，避免老用户升级后白跑一轮 ffmpeg
-    if (bg_path or "").strip() or make_video:
+    # 传了背景（或 BGM）才出视频，避免老用户升级后白跑一轮 ffmpeg
+    if (bg_path or "").strip() or (bgm or "").strip() or make_video:
         stage_video(
             st,
             table,
-            overrides=VideoOverrides(bg_path=bg_path, size=size, subtitle=subtitle),
+            overrides=VideoOverrides(bg_path=bg_path, bgm=bgm, size=size, subtitle=subtitle),
             name_column="文件原名",
             limit=limit,
         )

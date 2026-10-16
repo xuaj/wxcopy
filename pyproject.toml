@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wxcopy"
-version = "0.4.0"
+version = "0.5.0"
 description = "视频号对标素材处理流水线：语音转文字 / 多模型文案仿写 / 文案转配音 / 口播视频合成"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -29,9 +29,11 @@ tts-offline = ["pyttsx3>=2.90"]
 subtitle = ["jieba>=0.42"]
 # 图片 OCR（本地离线中文）；没装时 wxcopy ocr --engines 会提示怎么装
 ocr = ["rapidocr-onnxruntime>=1.3"]
+# 成片封面（1080x1920 竖图）；没装时 wxcopy cover 会提示怎么装
+cover = ["Pillow>=10.0"]
 web = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
 dev = ["pytest>=8.0", "ruff>=0.6"]
-all = ["jieba>=0.42", "pyttsx3>=2.90", "rapidocr-onnxruntime>=1.3",
+all = ["jieba>=0.42", "pyttsx3>=2.90", "rapidocr-onnxruntime>=1.3", "Pillow>=10.0",
        "fastapi>=0.115", "uvicorn[standard]>=0.30"]
 
 [project.scripts]
