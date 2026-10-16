@@ -915,10 +915,24 @@ ruff format --check .   # 只检查不改
 - **pytest**，矩阵：Ubuntu × Python 3.11/3.12，外加 Windows × 3.11
   （Windows 是因为 `safe_stem` 的路径分隔符处理在两套系统上语义不同）
 
-CI 里刻意用 `pip install --no-deps` 跳过了 `faster-whisper`：它会拖进
-torch（2GB+），而单元测试全程不碰 ASR / ffmpeg / 模型，装了纯属浪费
-（装 torch 的话 CI 要从 1 分钟变成 10 分钟以上）。
-测试实际只需要 `pandas / openpyxl / PyYAML / rich` 四个运行时依赖。
+CI 现在也走 uv：
+
+```yaml
+- uses: astral-sh/setup-uv@v10.3.0     # 带缓存
+- run: uv sync --all-extras --locked
+- run: uv run ruff check --output-format=github .
+- run: uv run ruff format --check --diff .
+- run: uv run pytest -v
+```
+
+两个细节：
+
+- **`--all-extras` 必须带**。以前 CI 用 `pip install --no-deps` 只装四个最小依赖，
+  代价是封面（要 Pillow）和控制台（要 fastapi）的用例**静默 skip**——
+  CI 一片绿但什么都没验到，0.4.0 就因为这个藏了个真 bug 一整个版本。
+  现在全装，`faster-whisper` 用的是 ctranslate2 不是 torch，实测 30 秒能装完。
+- **`--locked`**：改了 `pyproject.toml` 却忘了 `uv lock`，CI 直接红，
+  不用等本地哪天突然跑不起来才反应过来。
 
 ### 加一个新阶段
 
