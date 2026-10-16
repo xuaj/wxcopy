@@ -1,3 +1,7 @@
+# 首选用 uv：`uv sync --all-extras`（有 uv.lock，可复现）。
+# 本文件是给「不想装 uv」的场景兜底的，只列运行期依赖；
+# 开发依赖（pytest + ruff）在 pyproject 的 [dependency-groups] dev 里，
+# 用 pip 的话请单独装：pip install "pytest>=8.0" "ruff>=0.6,<1.0"
 openai>=1.40
 pandas>=2.0
 openpyxl>=3.1

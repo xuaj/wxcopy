@@ -28,20 +28,38 @@
 
 ## 一、安装
 
+环境用 **uv** 管理（比 pip 快一个数量级，且带 `uv.lock` 锁文件保证可复现）。
+没装 uv 先看 https://docs.astral.sh/uv/getting-started/installation/ 。
+
 ```bash
-# 1) 建虚拟环境
-python -m venv .venv && .venv\Scripts\activate      # Windows
-# python3 -m venv .venv && source .venv/bin/activate  # macOS/Linux
-
-# 2) 装依赖
-pip install -r requirements.txt
-
-# 3) 开发模式安装（可选，装完能直接用 wxcopy 命令）
-pip install -e .
+uv venv --python 3.13      # 建 .venv（3.10+ 都行，本机是 3.13）
+uv sync --all-extras       # 装全部依赖 + 开发依赖，并生成/更新 uv.lock
+uv run wxcopy --help       # 之后所有命令都走 uv run
 ```
 
-> 跑测试/做开发请顺带装：`pip install -e ".[dev]"`
-> 要出封面请装 Pillow：`pip install -e ".[cover]"`（其余能力都是按需装，见下表）
+| 想做的事 | 命令 |
+|---|---|
+| 跑命令 | `uv run wxcopy web`、`uv run wxcopy cover ...` |
+| 激活环境（想直接敲 `wxcopy` 时） | `.venv\Scripts\activate`（Windows）/ `source .venv/bin/activate` |
+| 装/升级后重建 | `uv sync --all-extras` |
+| 加新依赖 | `uv add openai` / 只开发用 `uv add --group dev ipdb` |
+| 升级单个包 | `uv lock --upgrade-package pandas && uv sync --all-extras` |
+
+> ⚠️ **一定要带 `--all-extras`**。uv 是按锁文件精确同步的，
+> 光跑 `uv sync` 会把可选依赖（Pillow / fastapi / rapidocr …）**从环境里卸掉**。
+> 只想装最小集合就另说，但那样封面和 Web 控制台都跑不起来。
+
+不想用 uv 的话 pip 也行（只是慢，且没有锁文件）：
+
+```bash
+python -m venv .venv && .venv\Scripts\activate
+pip install -r requirements.txt
+pip install -e .
+# 开发依赖（pytest + ruff）不在 extras 里了，单独装：
+pip install "pytest>=8.0" "ruff>=0.6,<1.0"
+# 可选能力按需装，见下表；例如封面：
+pip install -e ".[cover]"
+```
 
 ### 外部依赖
 
@@ -70,11 +88,12 @@ wxcopy web --port 9000          # 换端口
 wxcopy web --no-browser         # 不自启浏览器，自己打开链接
 ```
 
-Web 依赖没装时先装一下：
+Web 依赖在 `all` / `web` 里，`uv sync --all-extras` 已经带上。
+只装了最小集合的话补一下：
 
 ```bash
-pip install "fastapi>=0.115" "uvicorn[standard]>=0.30"
-# 或 pip install -e ".[web]"
+uv sync --extra web          # uv
+# pip install "fastapi>=0.115" "uvicorn[standard]>=0.30"   # pip
 ```
 
 界面能做的事：
@@ -357,7 +376,8 @@ wxcopy video in.xlsx --column 仿写文案 -b 背景.jpg --style big --no-typewr
 你也可以用 `--keyword` 把自家专有名词加进分词词典。
 
 ```bash
-pip install jieba        # 或 pip install -e ".[subtitle]"
+uv sync --extra subtitle     # uv（--all-extras 已包含）
+# pip install jieba          # pip
 ```
 
 
@@ -799,7 +819,7 @@ wxcopy 负责到**上传前**：`wxcopy publish` 把标题候选、简介、话�
 **封面是空白的 / 生成失败**
 两种原因，报错信息会直接说明：
 
-- 缺 Pillow：`pip install -e ".[cover]"`
+- 缺 Pillow：`uv sync --extra cover`（或 `pip install -e ".[cover]"`）
 - 系统里没有中文字体：用 `--font` 指定字体文件路径（如
   `--font "C:/Windows/Fonts/simhei.ttf"`）。Linux 上装 `fonts-noto-cjk` 即可。
 
@@ -847,11 +867,16 @@ wxcopy 负责到**上传前**：`wxcopy publish` 把标题候选、简介、话�
 ### 跑测试
 
 ```bash
-pip install -e ".[dev]"     # pytest + ruff
-pytest                      # 全量
-pytest -q tests/test_table.py            # 单个文件
-pytest -q -k "merge"                     # 按名字挑
+uv sync --all-extras        # 开发依赖在 dev 组里，uv 默认就会装
+uv run pytest               # 全量
+uv run pytest -q tests/test_table.py     # 单个文件
+uv run pytest -q -k "merge"              # 按名字挑
+uv run ruff check .         # 静态检查
+uv run ruff format .        # 格式化
 ```
+
+> 本机有个 `wxcopy.cmd` 垫片（gitignore 掉了），在项目目录里直接敲
+> `wxcopy web` 就能跑，不用先激活 `.venv`。
 
 测试只覆盖**纯逻辑**（表格读写、配置解析、行序合并、视频/封面指纹、断行与排版、
 音频滤镜串拼接、文件名安全化），不碰模型调用和 ffmpeg，所以几秒就能跑完、也不需要 API Key。
