@@ -211,8 +211,65 @@ def make_runner(params: dict) -> Callable[[Job], dict]:
             st.ocr.provider = src["ocr_provider"]
         if src.get("ocr_model") is not None:
             st.ocr.model = src["ocr_model"]
-        # ---- 视频合成 ----
+        # ---- 背景音乐：和视频分开处理 ----
+        # BGM 只能挂在视频上，但用户可能只勾了 BGM 忘了勾视频，
+        # 所以这几个设置无条件写进 st，最后由 run_pipeline 判断要不要出片。
         vp = params.get("video") or {}
+        bgm_path = (vp.get("bgm") or "").strip()
+        if bgm_path:
+            st.video.bgm = bgm_path
+        if vp.get("bgm_volume") is not None:
+            st.video.bgm_volume = float(vp["bgm_volume"])
+        if vp.get("bgm_duck") is not None:
+            st.video.bgm_duck = bool(vp["bgm_duck"])
+        if vp.get("bgm_duck_ratio") is not None:
+            st.video.bgm_duck_ratio = float(vp["bgm_duck_ratio"])
+        if vp.get("bgm_fade_out") is not None:
+            st.video.bgm_fade_out = float(vp["bgm_fade_out"])
+
+        # ---- 封面 ----
+        cp = params.get("cover") or {}
+        gen_cover = bool(cp.get("enabled"))
+        if gen_cover:
+            if cp.get("style"):
+                st.cover.style = cp["style"]
+            if cp.get("bg") is not None:
+                st.cover.bg = cp["bg"]
+            if cp.get("bg_color") is not None:
+                st.cover.bg_color = cp["bg_color"]
+            if cp.get("accent"):
+                st.cover.accent = cp["accent"]
+            if cp.get("footer") is not None:
+                st.cover.footer = cp["footer"]
+            if cp.get("font") is not None:
+                st.cover.font = cp["font"]
+            if cp.get("title_max"):
+                st.cover.title_max = int(cp["title_max"])
+            if cp.get("subtitle_max"):
+                st.cover.subtitle_max = int(cp["subtitle_max"])
+            if cp.get("jpeg") is not None:
+                st.cover.jpeg = bool(cp["jpeg"])
+
+        # ---- 发布素材包 ----
+        pb = params.get("publish") or {}
+        gen_publish = bool(pb.get("enabled"))
+        if gen_publish:
+            if pb.get("titles"):
+                st.publish.titles = int(pb["titles"])
+            if pb.get("desc_max"):
+                st.publish.desc_max = int(pb["desc_max"])
+            if pb.get("topics"):
+                st.publish.topics = int(pb["topics"])
+            if pb.get("platforms"):
+                st.publish.platforms = pb["platforms"]
+            if pb.get("concurrency"):
+                st.publish.concurrency = int(pb["concurrency"])
+            if pb.get("prompt") is not None:
+                st.publish.prompt = pb["prompt"]
+            if pb.get("auto_cover") is not None:
+                st.publish.auto_cover = bool(pb["auto_cover"])
+
+        # ---- 视频合成 ----
         gen_video = bool(vp.get("enabled"))
         if gen_video:
             st.video.bg_path = (vp.get("bg_path") or "").strip()
@@ -280,16 +337,24 @@ def make_runner(params: dict) -> Callable[[Job], dict]:
             recursive=bool(params.get("recursive")),
             asr_language=params.get("language"),
             bg_path=(vp.get("bg_path") or None) or None,
+            bgm=(bgm_path or None),
             size=vp.get("size"),
             subtitle=(bool(vp["subtitle"]) if vp.get("subtitle") is not None else None),
             make_video=gen_video,
+            make_cover=gen_cover,
+            make_publish=gen_publish,
+            cover=(cp or None),
+            publish=(pb or None),
+            cover_title_column=(cp.get("title_column") or None),
+            cover_subtitle_column=(cp.get("subtitle_column") or None),
             source=(src or None),  # dict -> pipeline 里转成 SourceSpec
         )
 
         out: dict[str, Any] = {k: str(v) for k, v in res.items()}
         # 把音频文件直接列出来，省得用户还要自己在 voice 子目录里翻
-        vd = Path(out.get("voice_dir", ""))
-        if vd.is_dir():
+        vd = Path(out.get("voice_dir") or "")
+        # 必须判空：Path("") 等于当前目录，不判会把仓库根目录下的文件当成配音产物
+        if out.get("voice_dir") and vd.is_dir():
             files = sorted(p for p in vd.iterdir() if p.is_file())
             out["voice_count"] = len(files)
             out["voice_files"] = [str(p) for p in files[:50]]
@@ -300,6 +365,18 @@ def make_runner(params: dict) -> Callable[[Job], dict]:
             out["video_count"] = len(vids)
             out["video_files"] = [str(p) for p in vids[:50]]
             get_logger().info("视频产物：%d 个文件，位于 %s", len(vids), hd)
+        # 封面是图片，页面要直接显示缩略图，所以这里也列出来
+        cv = Path(out.get("cover_dir") or "")
+        if out.get("cover_dir") and cv.is_dir():
+            imgs = sorted(p for p in cv.iterdir() if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"})
+            out["cover_count"] = len(imgs)
+            out["cover_files"] = [str(p) for p in imgs[:50]]
+            get_logger().info("封面产物：%d 张，位于 %s", len(imgs), cv)
+        pp = Path(out.get("publish_plan") or "")
+        if out.get("publish_plan"):
+            out["publish_plan_exists"] = pp.is_file()
+            out["publish_plan_size"] = pp.stat().st_size if pp.is_file() else 0
+            get_logger().info("发布清单：%s", pp)
         tbl = Path(out.get("table", ""))
         out["table_exists"] = tbl.is_file()
         out["table_size"] = tbl.stat().st_size if tbl.is_file() else 0

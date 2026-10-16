@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from ..core.asr import MEDIA_EXTS
 from ..core.rewriter import list_prompts
@@ -172,6 +172,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/defaults")
     def defaults() -> dict:
+        from ..core.publish import list_prompts as list_publish_prompts
         from ..core.source import ocr_backends
         from ..core.video import PRESETS
 
@@ -233,6 +234,36 @@ def create_app() -> FastAPI:
             "video_tail_pad": st.video.tail_pad,
             "video_fade_in": st.video.fade_in,
             "video_concurrency": st.video.concurrency,
+            # ---- 背景音乐 ----
+            "video_bgm": st.video.bgm,
+            "video_bgm_volume": st.video.bgm_volume,
+            "video_bgm_duck": st.video.bgm_duck,
+            "video_bgm_duck_ratio": st.video.bgm_duck_ratio,
+            "video_bgm_fade_out": st.video.bgm_fade_out,
+            # ---- 封面 ----
+            "cover_styles": [
+                {"id": "tech", "name": "科技 · 深色渐变 + 网格"},
+                {"id": "plain", "name": "纯色 · 干净"},
+                {"id": "light", "name": "浅色 · 白底深字"},
+            ],
+            "cover_style": st.cover.style,
+            "cover_bg": st.cover.bg,
+            "cover_bg_color": st.cover.bg_color,
+            "cover_accent": st.cover.accent,
+            "cover_footer": st.cover.footer,
+            "cover_font": st.cover.font,
+            "cover_title_max": st.cover.title_max,
+            "cover_subtitle_max": st.cover.subtitle_max,
+            "cover_jpeg": st.cover.jpeg,
+            "cover_dir": str(st.cover_dir),
+            # ---- 发布素材包 ----
+            "publish_titles": st.publish.titles,
+            "publish_desc_max": st.publish.desc_max,
+            "publish_topics": st.publish.topics,
+            "publish_platforms": st.publish.platforms,
+            "publish_concurrency": st.publish.concurrency,
+            "publish_auto_cover": st.publish.auto_cover,
+            "publish_prompts": list_publish_prompts(),
             "voice_dir": str(st.voice_dir),
             "video_dir": str(st.video_dir),
         }
@@ -276,6 +307,49 @@ def create_app() -> FastAPI:
             }
         except Exception as e:  # noqa: BLE001
             raise HTTPException(400, f"读取表格失败：{str(e)[:160]}") from e
+
+    # ---------- 封面预览 ----------
+    @app.post("/api/cover/preview")
+    def cover_preview(payload: dict) -> Response:
+        """按当前参数实时画一张封面给页面看。
+
+        不写进产物目录（那会让断点续跑的指纹误判成「已生成」），
+        出图后立刻把临时文件删掉。
+        """
+        import tempfile
+
+        from ..core.cover import CoverCfg as CoreCoverCfg
+        from ..core.cover import CoverError, make_cover
+
+        st = load_settings()
+        c = st.cover
+        cfg = CoreCoverCfg(
+            width=int(payload.get("width") or c.width),
+            height=int(payload.get("height") or c.height),
+            style=(payload.get("style") or c.style),
+            bg=(payload.get("bg", c.bg) or ""),
+            bg_color=(payload.get("bg_color", c.bg_color) or ""),
+            accent=(payload.get("accent") or c.accent),
+            title_max=int(payload.get("title_max") or c.title_max),
+            subtitle_max=int(payload.get("subtitle_max") or c.subtitle_max),
+            footer=(payload.get("footer", c.footer) or ""),
+            font=(payload.get("font", c.font) or ""),
+            jpeg=bool(payload.get("jpeg", c.jpeg)),
+        )
+        title = (payload.get("title") or "").strip() or "封面标题预览"
+        sub = (payload.get("subtitle") or "").strip()
+        ext = ".jpg" if cfg.jpeg else ".png"
+        fd, tmp = tempfile.mkstemp(prefix="wxcopy-cover-", suffix=ext)
+        os.close(fd)
+        try:
+            make_cover(title, Path(tmp), cfg, subtitle=sub)
+            data = Path(tmp).read_bytes()
+        except CoverError as e:
+            # 缺 Pillow / 缺中文字体：告诉用户怎么补，别甩一堆 traceback
+            raise HTTPException(400, str(e)) from e
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+        return Response(content=data, media_type="image/jpeg" if cfg.jpeg else "image/png")
 
     # ---------- 任务 ----------
     @app.post("/api/run")

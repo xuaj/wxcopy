@@ -92,6 +92,13 @@ button.danger{color:var(--err);border-color:#fecaca;background:var(--err-l)}
 .tag.ok{background:var(--ok-l);color:var(--ok)}.tag.err{background:var(--err-l);color:var(--err)}
 .warnbox{background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:9px 12px;
   border-radius:8px;font-size:12px;margin-top:10px}
+/* 封面缩略图 */
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px;margin-top:8px}
+.thumb{border:1px solid var(--bd);border-radius:8px;overflow:hidden;background:#fff;text-align:center}
+.thumb img{display:block;width:100%;aspect-ratio:9/16;object-fit:cover;background:#0f172a;cursor:pointer}
+.thumb .fn{font-size:10px;color:var(--tx2);padding:3px 4px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+#cPrev img{max-width:170px;border-radius:10px;border:1px solid var(--bd);box-shadow:var(--sh)}
 </style>
 </head>
 <body>
@@ -261,6 +268,46 @@ button.danger{color:var(--err);border-color:#fecaca;background:var(--err-l)}
           </div>
           <div class="hint" id="vBgHint">图片会被裁剪铺满画面；视频背景会循环播放到语音结束</div>
 
+          <!-- ===== 背景音乐 ===== -->
+          <div style="margin-top:12px;border-top:1px dashed var(--bd2);padding-top:10px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2)">
+              <input type="checkbox" id="vBgmOn" style="width:auto" onchange="onBgmChange()">
+              添加背景音乐（自动循环 + 人声闪避 + 结尾淡出）
+            </label>
+            <div id="vBgmBox" style="display:none;margin-top:8px">
+              <label>音乐文件（mp3 / wav / m4a…）</label>
+              <div class="row">
+                <input type="text" id="vBgm" placeholder="例如 D:\素材\bgm.mp3">
+                <button class="sm" onclick="openPicker('vBgm','file','audio')">浏览…</button>
+              </div>
+              <div class="g2" style="margin-top:10px">
+                <div>
+                  <label>音量（0~1，别盖过人声）</label>
+                  <input type="number" id="vBgmVol" step="0.02" min="0" max="1" value="0.18">
+                </div>
+                <div>
+                  <label>闪避</label>
+                  <select id="vBgmDuck">
+                    <option value="1">开启（推荐）</option>
+                    <option value="0">关闭（音量恒定）</option>
+                  </select>
+                </div>
+              </div>
+              <div class="g2" style="margin-top:10px">
+                <div>
+                  <label>闪避强度（ratio，越大压得越狠）</label>
+                  <input type="number" id="vBgmRatio" step="1" min="1" max="20" value="8">
+                </div>
+                <div>
+                  <label>结尾淡出（秒，0 = 直接停）</label>
+                  <input type="number" id="vBgmFade" step="0.1" min="0" max="10" value="1.5">
+                </div>
+              </div>
+              <div class="hint">音乐不足片长时自动循环铺满；开着闪避时，人声一出来音乐就会被压下去，
+                停顿时再抬回来。仓库 <code>assets/bgm_demo.mp3</code> 是一段可自由使用的示例配乐。</div>
+            </div>
+          </div>
+
           <div class="g2" style="margin-top:12px">
             <div>
               <label>画面尺寸</label>
@@ -416,7 +463,158 @@ button.danger{color:var(--err);border-color:#fecaca;background:var(--err-l)}
     </div>
 
     <div class="card">
-      <h2><span class="n">6</span>转写设置</h2>
+      <h2><span class="n">6</span>封面（1080×1920 竖图）</h2>
+      <div class="bd">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2)">
+          <input type="checkbox" id="cEnabled" style="width:auto" onchange="toggleCover()">
+          给每条文案生成一张封面（发布时要用的那张竖图）
+        </label>
+        <div id="cBox" style="display:none;margin-top:8px">
+          <div class="g2">
+            <div>
+              <label>风格</label>
+              <select id="cStyle" onchange="onCoverStyleChange()"></select>
+            </div>
+            <div>
+              <label>输出格式</label>
+              <select id="cFmt">
+                <option value="0">PNG（无损，体积大）</option>
+                <option value="1">JPG（体积小）</option>
+              </select>
+            </div>
+          </div>
+
+          <label style="margin-top:10px">背景图（留空按风格本地生成）</label>
+          <div class="row">
+            <input type="text" id="cBg" placeholder="例如 D:\素材\封面底图.jpg">
+            <button class="sm" onclick="openPicker('cBg','file','image')">浏览…</button>
+          </div>
+
+          <div class="g2" style="margin-top:10px">
+            <div>
+              <label>强调色（分隔线 / 光晕）</label>
+              <div class="row">
+                <input type="color" id="cAccent" style="width:44px;height:34px;padding:2px;flex:none">
+                <input type="text" id="cAccentHex" placeholder="#00F090">
+              </div>
+            </div>
+            <div>
+              <label>纯色底色（plain / light 用）</label>
+              <input type="text" id="cBgColor" placeholder="留空按风格取默认">
+            </div>
+          </div>
+
+          <div class="g2" style="margin-top:10px">
+            <div>
+              <label>页脚小字</label>
+              <input type="text" id="cFooter" placeholder="例如：@我的视频号">
+            </div>
+            <div>
+              <label>字体（留空自动挑中文字体）</label>
+              <input type="text" id="cFont" placeholder="留空 = 自动">
+            </div>
+          </div>
+
+          <div class="g2" style="margin-top:10px">
+            <div>
+              <label>标题取自哪一列</label>
+              <input type="text" id="cTitleCol" placeholder="推荐标题">
+            </div>
+            <div>
+              <label>副标题取自哪一列</label>
+              <input type="text" id="cSubCol" placeholder="留空 = 不写副标题">
+            </div>
+          </div>
+
+          <div class="g2" style="margin-top:10px">
+            <div>
+              <label>标题最多几个字</label>
+              <input type="number" id="cTitleMax" min="4" max="60" value="20">
+            </div>
+            <div>
+              <label>副标题最多几个字</label>
+              <input type="number" id="cSubMax" min="4" max="60" value="24">
+            </div>
+          </div>
+
+          <!-- 实时预览 -->
+          <div style="margin-top:12px;border-top:1px dashed var(--bd2);padding-top:10px">
+            <div class="g2">
+              <div>
+                <label>预览标题</label>
+                <input type="text" id="cPrevT" placeholder="例如：三分钟看懂本地大模型">
+              </div>
+              <div>
+                <label>预览副标题</label>
+                <input type="text" id="cPrevS" placeholder="选填">
+              </div>
+            </div>
+            <div class="row" style="margin-top:8px;align-items:flex-start">
+              <button class="sm" id="btnCoverPrev" onclick="previewCover()">🖼 生成预览</button>
+              <span class="hint" id="cPrevHint" style="margin-top:8px"></span>
+            </div>
+            <div id="cPrev" style="margin-top:10px;text-align:center"></div>
+          </div>
+
+          <div class="hint">「标题列」取不到值时自动从「仿写文案」里截一句；
+            跑了发布素材包的话会先有「推荐标题」列，封面会优先用它。
+            封面在本地用 Pillow 画，不调任何生图接口。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="n">7</span>发布素材包</h2>
+      <div class="bd">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2)">
+          <input type="checkbox" id="pEnabled" style="width:auto" onchange="togglePublish()">
+          生成标题候选 / 简介 / 话题，并导出发布清单
+        </label>
+        <div id="pBox" style="display:none;margin-top:8px">
+          <div class="g2">
+            <div>
+              <label>目标平台（逗号分隔）</label>
+              <input type="text" id="pPlatforms" placeholder="视频号,抖音">
+            </div>
+            <div>
+              <label>文案模板</label>
+              <select id="pPrompt"></select>
+            </div>
+          </div>
+          <div class="g2" style="margin-top:10px">
+            <div>
+              <label>候选标题数</label>
+              <input type="number" id="pTitles" min="1" max="10" value="5">
+            </div>
+            <div>
+              <label>话题标签数</label>
+              <input type="number" id="pTopics" min="1" max="12" value="6">
+            </div>
+          </div>
+          <div class="g2" style="margin-top:10px">
+            <div>
+              <label>简介最大字数</label>
+              <input type="number" id="pDescMax" min="20" max="300" value="100">
+            </div>
+            <div>
+              <label>并发数</label>
+              <input type="number" id="pConc" min="1" max="8" value="1">
+            </div>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--tx2)">
+            <input type="checkbox" id="pAutoCover" style="width:auto"> 清单里自动带上封面路径
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--tx2)">
+            <input type="checkbox" id="pBundle" style="width:auto"> 另外打包「视频 + 封面 + 文案」到一个文件夹
+          </label>
+          <div class="warnbox">⚠️ 这一阶段<b>不会替你发布</b>。视频号、抖音都没有对普通开发者开放的
+            「代用户发布」接口，这里只把上传前要填的字和素材准备好，最后一步仍需手动上传。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="n">8</span>转写设置</h2>
       <div class="bd">
         <div class="g2">
           <div>
@@ -560,9 +758,41 @@ async function init(){
     $('vFade').value = d.video_fade_in || 0;
     $('vCrf').value = d.video_crf || 23;
     $('vConc').value = d.video_concurrency || 1;
+    /* 背景音乐 */
+    $('vBgm').value = d.video_bgm || '';
+    $('vBgmVol').value = d.video_bgm_volume != null ? d.video_bgm_volume : 0.18;
+    $('vBgmDuck').value = (d.video_bgm_duck === false) ? '0' : '1';
+    $('vBgmRatio').value = d.video_bgm_duck_ratio || 8;
+    $('vBgmFade').value = d.video_bgm_fade_out != null ? d.video_bgm_fade_out : 1.5;
+    $('vBgmOn').checked = !!d.video_bgm;
+    /* 封面 */
+    $('cStyle').innerHTML = (d.cover_styles || [{id:'tech',name:'科技'}])
+      .map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+    $('cStyle').value = d.cover_style || 'tech';
+    $('cBg').value = d.cover_bg || '';
+    $('cBgColor').value = d.cover_bg_color || '';
+    $('cAccentHex').value = /^#[0-9a-fA-F]{6}$/.test(d.cover_accent||'') ? d.cover_accent : '#00F090';
+    $('cAccent').value = $('cAccentHex').value;
+    $('cFooter').value = d.cover_footer || '';
+    $('cFont').value = d.cover_font || '';
+    $('cTitleMax').value = d.cover_title_max || 20;
+    $('cSubMax').value = d.cover_subtitle_max || 24;
+    $('cFmt').value = d.cover_jpeg ? '1' : '0';
+    $('cTitleCol').value = '推荐标题';
+    $('cAccent').addEventListener('input', ()=>syncAccent('picker'));
+    $('cAccentHex').addEventListener('input', ()=>syncAccent('hex'));
+    /* 发布素材包 */
+    $('pPlatforms').value = d.publish_platforms || '视频号,抖音';
+    $('pTitles').value = d.publish_titles || 5;
+    $('pTopics').value = d.publish_topics || 6;
+    $('pDescMax').value = d.publish_desc_max || 100;
+    $('pConc').value = d.publish_concurrency || 1;
+    $('pAutoCover').checked = d.publish_auto_cover !== false;
+    $('pPrompt').innerHTML = (d.publish_prompts || ['default'])
+      .map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');
     $('vHlColor').addEventListener('input', ()=>syncHlColor('picker'));
     $('vHlHex').addEventListener('input', ()=>syncHlColor('hex'));
-    toggleVideo();
+    toggleVideo(); toggleCover(); togglePublish();
     /* 原始文案来源 */
     $('srcKind').innerHTML = (d.source_kinds || [{id:'media',name:'音视频目录'}])
       .map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
@@ -835,6 +1065,7 @@ async function checkMedia(){
 function toggleVideo(){
   $('vBox').style.display = $('vEnabled').checked ? 'block' : 'none';
   if($('vEnabled').checked){ onBgPicked($('vBg').value.trim()); onStyleChange(); }
+  showOutHint();
 }
 
 /* 切 classic / big 两组参数，并同步提示 */
@@ -864,6 +1095,63 @@ function onTyChange(){
   const fixed = $('vTyMode').value === 'fixed';
   $('vTyFixedBox').style.display = fixed ? 'block' : 'none';
   $('vTyAutoBox').style.display  = fixed ? 'none' : 'block';
+}
+
+/* ---------- 背景音乐 ---------- */
+function onBgmChange(){
+  $('vBgmBox').style.display = $('vBgmOn').checked ? 'block' : 'none';
+}
+
+/* ---------- 封面 ---------- */
+function toggleCover(){
+  $('cBox').style.display = $('cEnabled').checked ? 'block' : 'none';
+  showOutHint();
+}
+
+function onCoverStyleChange(){
+  const light = $('cStyle').value === 'light';
+  $('cBgColor').placeholder = light ? '例如 #F5F7FA（浅色底要配深字）' : '留空按风格取默认';
+}
+
+function syncAccent(from){
+  const c = from === 'picker' ? $('cAccent').value : $('cAccentHex').value.trim();
+  if(from === 'picker') $('cAccentHex').value = c;
+  else if(/^#[0-9a-fA-F]{6}$/.test(c)) $('cAccent').value = c;
+}
+
+async function previewCover(){
+  const btn = $('btnCoverPrev');
+  if(btn) btn.disabled = true;
+  $('cPrevHint').textContent = '正在生成…';
+  try{
+    const body = {
+      title: $('cPrevT').value.trim() || '三分钟看懂本地大模型',
+      subtitle: $('cPrevS').value.trim(),
+      style: $('cStyle').value,
+      bg: $('cBg').value.trim(),
+      bg_color: $('cBgColor').value.trim(),
+      accent: $('cAccentHex').value.trim() || '#00F090',
+      footer: $('cFooter').value.trim(),
+      font: $('cFont').value.trim(),
+      title_max: parseInt($('cTitleMax').value || '20'),
+      subtitle_max: parseInt($('cSubMax').value || '24'),
+      jpeg: $('cFmt').value === '1',
+    };
+    const r = await fetch('/api/cover/preview', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    if(!r.ok){ let m=r.statusText; try{ m=(await r.json()).detail||m }catch(e){}; throw new Error(m); }
+    const url = URL.createObjectURL(await r.blob());
+    $('cPrev').innerHTML = `<a href="${url}" target="_blank"><img src="${url}" alt="封面预览"></a>`;
+    $('cPrevHint').textContent = '点图片可看大图';
+  }catch(e){
+    $('cPrevHint').textContent = '预览失败：' + (e.message||e);
+  }finally{ if(btn){ btn.disabled = false; } }
+}
+
+/* ---------- 发布素材包 ---------- */
+function togglePublish(){
+  $('pBox').style.display = $('pEnabled').checked ? 'block' : 'none';
+  showOutHint();
 }
 
 /* 颜色框与文本框双向同步 */
@@ -941,6 +1229,12 @@ function collect(){
       fade_in: parseFloat($('vFade').value || '0'),
       crf: parseInt($('vCrf').value || '23'),
       concurrency: parseInt($('vConc').value || '1'),
+      // 背景音乐：没勾就传空串，后端按「无 BGM」处理
+      bgm: $('vBgmOn').checked ? $('vBgm').value.trim() : '',
+      bgm_volume: parseFloat($('vBgmVol').value || '0.18'),
+      bgm_duck: $('vBgmDuck').value !== '0',
+      bgm_duck_ratio: parseFloat($('vBgmRatio').value || '8'),
+      bgm_fade_out: parseFloat($('vBgmFade').value || '1.5'),
     }, $('vStyle').value === 'big' ? {
       highlight_mode: $('vHl').value,
       highlight_color: $('vHlHex').value.trim() || '#00F090',
@@ -960,6 +1254,32 @@ function collect(){
       margin_v: parseInt($('vMargin').value || '300'),
       bold: $('vBold').value === '1',
     }),
+    cover: {
+      enabled: $('cEnabled').checked,
+      style: $('cStyle').value,
+      bg: $('cBg').value.trim(),
+      bg_color: $('cBgColor').value.trim(),
+      accent: $('cAccentHex').value.trim() || '#00F090',
+      footer: $('cFooter').value.trim(),
+      font: $('cFont').value.trim(),
+      title_max: parseInt($('cTitleMax').value || '20'),
+      subtitle_max: parseInt($('cSubMax').value || '24'),
+      jpeg: $('cFmt').value === '1',
+      title_column: $('cTitleCol').value.trim() || '推荐标题',
+      subtitle_column: $('cSubCol').value.trim(),
+    },
+    publish: {
+      enabled: $('pEnabled').checked,
+      platforms: $('pPlatforms').value.trim(),
+      prompt: $('pPrompt').value,
+      titles: parseInt($('pTitles').value || '5'),
+      topics: parseInt($('pTopics').value || '6'),
+      desc_max: parseInt($('pDescMax').value || '100'),
+      concurrency: parseInt($('pConc').value || '1'),
+      auto_cover: $('pAutoCover').checked,
+      bundle: $('pBundle').checked,
+      use_llm: true,
+    },
   };
 }
 
@@ -1057,6 +1377,31 @@ function renderOuts(o){
     });
     if((o.video_count||0) > 12) h += `<div class="hint">…还有 ${o.video_count-12} 个，点上方「打开」查看全部</div>`;
   }
+  if(o.cover_dir){
+    h += `<div class="o">
+      <span class="tag" style="background:#fae8ff;color:#86198f">封面目录</span>
+      <span class="p" title="${esc(o.cover_dir)}">${esc(o.cover_dir)}</span>
+      ${o.cover_count!=null?`<span class="tag ok">${o.cover_count} 张</span>`:''}
+      <button class="sm" onclick="openPath('${b64(o.cover_dir)}')">打开</button></div>`;
+    const imgs = (o.cover_files||[]).slice(0,16);
+    if(imgs.length){
+      h += '<div class="thumbs">' + imgs.map(f=>{
+        const url = '/api/download?path=' + encodeURIComponent(f);
+        return `<div class="thumb">
+          <img src="${esc(url)}" loading="lazy" onclick="openPath('${b64(f)}')" title="点一下在文件夹里打开">
+          <div class="fn" title="${esc(f)}">${esc(f.split(/[\\\\/]/).pop())}</div></div>`;
+      }).join('') + '</div>';
+    }
+    if((o.cover_count||0) > 16) h += `<div class="hint">…还有 ${o.cover_count-16} 张，点上方「打开」查看全部</div>`;
+  }
+  if(o.publish_plan){
+    h += `<div class="o">
+      <span class="tag" style="background:#e0e7ff;color:#3730a3">发布清单</span>
+      <span class="p" title="${esc(o.publish_plan)}">${esc(o.publish_plan)}</span>
+      ${o.publish_plan_size?`<span class="hint">${Math.round(o.publish_plan_size/1024)} KB</span>`:''}
+      <button class="sm" onclick="openPath('${b64(o.publish_plan)}')">打开</button>
+      <button class="sm" onclick="dl('${b64(o.publish_plan)}')">下载</button></div>`;
+  }
   box.innerHTML = h || '<div class="empty">暂无产物</div>';
 }
 /* 路径经 base64 传递，避免反斜杠/引号在 onclick 字符串里被转义破坏 */
@@ -1072,9 +1417,11 @@ function dl(b){ location.href = '/api/download?path='+encodeURIComponent(decodeU
 function showOutHint(){
   const p = $('workdir').value.trim();
   if(!p){ $('outHint').innerHTML = ''; return; }
-  const v = $('vEnabled').checked ? `，视频在 <code>${esc(p)}\\video</code>` : '';
-  $('outHint').innerHTML =
-    `音频会写到 <code>${esc(p)}\\voice</code>，表格在 <code>${esc(p)}\\transcripts.xlsx</code>${v}`;
+  let s = `音频会写到 <code>${esc(p)}\\voice</code>，表格在 <code>${esc(p)}\\transcripts.xlsx</code>`;
+  if($('vEnabled').checked) s += `，视频在 <code>${esc(p)}\\video</code>`;
+  if($('cEnabled').checked) s += `，封面在 <code>${esc(p)}\\cover</code>`;
+  if($('pEnabled').checked) s += `，发布清单在 <code>${esc(p)}\\publish\\publish_plan.xlsx</code>`;
+  $('outHint').innerHTML = s;
 }
 
 function toast(m){ alert(m); }

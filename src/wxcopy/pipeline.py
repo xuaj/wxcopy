@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .core.cover import CoverError
 from .core.llm import build_llm
 from .core.media import safe_stem
 from .core.rewriter import Rewriter, RewriteStyle, load_prompt
@@ -782,8 +783,6 @@ def stage_cover(
         return p
 
     # ---------- 批量模式 ----------
-    from .core.cover import CoverError
-
     path = Path(table)
     rows, columns = read_table(path, sheet=sheet)
     if not rows:
@@ -993,10 +992,19 @@ def run_pipeline(
     size: str | None = None,
     subtitle: bool | None = None,
     make_video: bool = False,
+    make_cover: bool = False,
+    make_publish: bool = False,
+    cover: CoverOverrides | dict | None = None,
+    cover_title_column: str | None = None,
+    cover_subtitle_column: str | None = None,
+    publish: dict | None = None,
     source=None,  # core.source.SourceSpec | dict；None 时按 media 走音视频
     **rewrite_kwargs,
 ) -> dict[str, Path]:
-    """一条龙：原始文案 -> 文案表 -> 仿写 -> 配音 -> 口播视频。
+    """一条龙：原始文案 -> 文案表 -> 仿写 -> 配音 -> 口播视频 -> 封面 -> 发布素材包。
+
+    后两个阶段默认关闭，只有显式打开才跑（封面要 Pillow、发布要调 LLM 写文案）。
+    `cover` / `publish` 用字典传，和 CLI 的 --cover-* / --publish-* 保持一致。
 
     media 参数保留是为了兼容旧调用；新的多来源请用 source=SourceSpec(...)。
     """
@@ -1043,4 +1051,36 @@ def run_pipeline(
             limit=limit,
         )
         out["video_dir"] = st.video_dir
+
+    # ---- 封面：给每条成片配一张 1080×1920 竖图 ----
+    if make_cover:
+        try:
+            stage_cover(
+                st,
+                table,
+                overrides=cover,
+                name_column="文件原名",
+                title_column=cover_title_column or "推荐标题",
+                subtitle_column=cover_subtitle_column or "",
+                limit=limit,
+            )
+            out["cover_dir"] = st.cover_dir
+        except CoverError as e:
+            # 缺 Pillow / 缺中文字体是环境问题，不该让整条流水线挂掉
+            log.warning("封面生成跳过：%s", str(e)[:200])
+
+    # ---- 发布素材包：标题 / 简介 / 话题 + 清单 ----
+    if make_publish:
+        pub = dict(publish or {})
+        plan = stage_publish(
+            st,
+            table,
+            name_column="文件原名",
+            platforms=pub.get("platforms") or None,
+            bundle=bool(pub.get("bundle")),
+            cover=pub.get("cover") or None,
+            use_llm=bool(pub.get("use_llm", True)),
+            limit=limit,
+        )
+        out["publish_plan"] = plan
     return out
