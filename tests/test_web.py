@@ -249,6 +249,31 @@ def test_runner_bgm_only_still_applies_settings(monkeypatch, tmp_path):
     assert captured["st"].video.bgm_volume == 0.5
 
 
+def test_runner_voice_list_excludes_cues_json(monkeypatch, tmp_path):
+    """配音目录里还躺着 <name>.cues.json（逐字时间戳），不能算成配音文件。
+
+    不按后缀过滤的话页面显示的配音数量会直接翻倍，用户会以为重跑出了两份。
+    """
+    from wxcopy.web.jobs import Job, make_runner
+
+    vd = tmp_path / "voice"
+    vd.mkdir()
+    (vd / "1_a.mp3").write_bytes(b"x")
+    (vd / "1_a.cues.json").write_text("{}", encoding="utf-8")
+    (vd / "2_b.wav").write_bytes(b"x")
+
+    def fake_run_pipeline(st, **kw):
+        return {"table": str(tmp_path / "t.xlsx"), "voice_dir": str(vd)}
+
+    monkeypatch.setattr("wxcopy.pipeline.run_pipeline", fake_run_pipeline)
+
+    params = {"workdir": str(tmp_path), "source": {"kind": "text", "text": "x"}}
+    res = make_runner(params)(Job(id="t4", params=params))
+
+    assert res["voice_count"] == 2
+    assert not any(f.endswith(".json") for f in res["voice_files"])
+
+
 # ---------------- run_pipeline 开关 ----------------
 
 

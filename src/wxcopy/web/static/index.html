@@ -556,8 +556,11 @@ button.danger{color:var(--err);border-color:#fecaca;background:var(--err-l)}
             <div id="cPrev" style="margin-top:10px;text-align:center"></div>
           </div>
 
-          <div class="hint">「标题列」取不到值时自动从「仿写文案」里截一句；
-            跑了发布素材包的话会先有「推荐标题」列，封面会优先用它。
+          <div class="hint">「标题列」（默认 <code>推荐标题</code>）取不到值时，会自动从「仿写文案」里截一句，
+            所以首次运行时也能出图。<br>
+            注意：同一次任务里封面排在发布素材包<b>之前</b>，此时「推荐标题」列还没写出来
+            （发布要引用封面路径，只能这个顺序）。想让封面用上大模型起的标题，
+            <b>再点一次「开始处理」</b>即可——表格里已经有「推荐标题」了，其余步骤会整段跳过，只重画封面。<br>
             封面在本地用 Pillow 画，不调任何生图接口。</div>
         </div>
       </div>

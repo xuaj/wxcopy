@@ -178,6 +178,7 @@ class JobManager:
 
 def make_runner(params: dict) -> Callable[[Job], dict]:
     """构造真正执行流水线的函数。"""
+    from ..core.tts import AUDIO_EXTS
     from ..pipeline import run_pipeline  # 延迟导入，避免循环
     from ..settings import load_settings
 
@@ -355,7 +356,10 @@ def make_runner(params: dict) -> Callable[[Job], dict]:
         vd = Path(out.get("voice_dir") or "")
         # 必须判空：Path("") 等于当前目录，不判会把仓库根目录下的文件当成配音产物
         if out.get("voice_dir") and vd.is_dir():
-            files = sorted(p for p in vd.iterdir() if p.is_file())
+            # 只认音频：配音旁边挂着 <name>.cues.json（逐字时间戳），
+            # 不过滤的话页面会把 json 也当成一条配音，数量直接翻倍。
+            # 用 pipeline 里同一份常量，避免两处定义漂移。
+            files = sorted(p for p in vd.iterdir() if p.is_file() and p.suffix.lower() in AUDIO_EXTS)
             out["voice_count"] = len(files)
             out["voice_files"] = [str(p) for p in files[:50]]
             get_logger().info("音频产物：%d 个文件，位于 %s", len(files), vd)
