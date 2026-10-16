@@ -31,6 +31,19 @@ def get_ffmpeg() -> str:
         raise RuntimeError("未找到 ffmpeg。请安装系统 ffmpeg，或 pip install imageio-ffmpeg 使用内置二进制。") from e
 
 
+def has_ffmpeg() -> bool:
+    """是否拿得到 ffmpeg。
+
+    「要转码」和「顺手探测一下」对 ffmpeg 的缺失容忍度完全不同：
+    前者该直接报错，后者该安静地降级（比如 publish 只想给清单填个时长）。
+    """
+    try:
+        get_ffmpeg()
+        return True
+    except RuntimeError:
+        return False
+
+
 def extract_audio(src: Path, dst: Path, sample_rate: int = 16000, channels: int = 1) -> Path:
     """把任意音视频转成 16kHz 单声道 wav，ASR 前统一格式用。"""
     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -123,6 +136,10 @@ def probe_duration(path: Path, exact: bool = True) -> float:
 
     ffprobe 优先；本机没有 ffprobe 时（imageio-ffmpeg 只带 ffmpeg）退回用 ffmpeg 探测，
     默认走 exact=True 全解码，保证 VBR mp3 一类文件也拿得到真实时长。
+
+    **没有 ffmpeg 时也必须返回 0 而不是抛异常**：这个函数在所有调用点都是
+    「尽力探测」的语义（挑时长分配字幕、给发布清单填个时长）。整机没装 ffmpeg
+    却因此把 publish 整条命令带崩，是踩过的坑。
     """
     path = Path(path)
     if not path.is_file():
@@ -145,6 +162,9 @@ def probe_duration(path: Path, exact: bool = True) -> float:
             return float((r.stdout or "").strip())
         except Exception:  # noqa: BLE001
             pass
+
+    if not has_ffmpeg():
+        return 0.0
 
     d = _ffmpeg_duration(path, exact=False)
     if d <= 0 and exact:
