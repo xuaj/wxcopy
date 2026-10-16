@@ -71,6 +71,11 @@ config/config.yaml
 wxcopy.yaml
 .wxcopy/
 
+# ---- 本机启动垫片 ----
+# 内容依赖本机虚拟环境位置（%USERPROFILE%\.workbuddy\...），对别人没意义。
+# 标准做法见 README「开发」一节的 `activate`。
+wxcopy.cmd
+
 # ---- 编辑器 / 系统 ----
 .idea/
 .vscode/
